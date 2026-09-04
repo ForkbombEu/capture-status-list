@@ -2,6 +2,7 @@
 go = "1.26.2"
 node = "latest"
 python = "3.12"
+docker-cli = "system"
 
 [tasks.test]
 run = "go test ./..."
@@ -26,6 +27,12 @@ run = "go run ."
 
 [tasks.serve]
 run = "uvicorn app:app --reload"
+
+[tasks."docker:build"]
+run = "docker build -t capture-status-list ."
+
+[tasks."docker:run"]
+run = "docker run --rm -p 8000:8000 -v capture-status-list-keys:/app/keys capture-status-list"
 
 [tasks.seed]
 run = "python seed.py"

@@ -65,6 +65,21 @@ keys/public.pem
 
 These files are local test material and are ignored by git.
 
+## Deploy (Docker)
+
+```sh
+mise run docker:build
+mise run docker:run
+```
+
+`docker:run` serves the app on `http://localhost:8000` and mounts a named
+volume for `keys/`, so the generated ES256 test key survives container
+restarts. Run without the volume for ephemeral local testing:
+
+```sh
+docker run --rm -p 8000:8000 capture-status-list
+```
+
 ## Test
 
 ```sh

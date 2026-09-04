@@ -48,6 +48,14 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 
+Open the small local UI at `http://localhost:8000/red`.
+
+Seed demo UI data after the server is running:
+
+```sh
+mise run seed
+```
+
 The app generates a local ES256 test signing key on first use:
 
 ```text

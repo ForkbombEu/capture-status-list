@@ -218,6 +218,10 @@ def get_credential_record(credential_id: str) -> CredentialRecord:
     return issuer_state.get_credential(credential_id)
 
 
+def list_credential_records() -> list[CredentialRecord]:
+    return sorted(issuer_state.credentials.values(), key=lambda record: record.idx)
+
+
 def debug_status_at(idx: int) -> str:
     return issuer_state.debug_status(idx)
 

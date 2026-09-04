@@ -27,5 +27,8 @@ run = "go run ."
 [tasks.serve]
 run = "uvicorn app:app --reload"
 
+[tasks.seed]
+run = "python seed.py"
+
 [tasks.build]
 run = "go build -o bin/starter ."

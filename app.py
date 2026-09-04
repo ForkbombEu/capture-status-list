@@ -1,7 +1,9 @@
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from issuer import (
     STATUS_LIST_URI,
@@ -40,6 +42,9 @@ app = FastAPI(
     description="Minimal FCA test harness using an IETF Token Status List JWT.",
 )
 
+DESIGN_DIR = Path(__file__).resolve().parent / ".puria" / "design"
+app.mount("/design-assets", StaticFiles(directory=DESIGN_DIR), name="design-assets")
+
 
 def _red_ui_html() -> str:
     return """<!doctype html>
@@ -47,188 +52,359 @@ def _red_ui_html() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mock TSL Red Route</title>
+  <title>Credimi TSL console</title>
+  <link rel="stylesheet" href="/design-assets/colors_and_type.css">
   <style>
-    :root {
-      --black: #000000;
-      --paper: #FFFDF5;
-      --yellow: #FFD23F;
-      --red: #FF6B6B;
-      --blue: #74B9FF;
-      --green: #88D498;
-      --orange: #FFA552;
-    }
     * { box-sizing: border-box; }
+    html { background: var(--bg-tint); }
     body {
       margin: 0;
-      background: var(--paper);
-      color: var(--black);
-      font: 16px/1.45 Inter, Arial, sans-serif;
+      background: var(--bg-tint);
+      color: var(--fg);
+      font: 400 var(--fs-base)/var(--lh-base) var(--font-sans);
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: var(--space-3) var(--space-6);
+    }
+    .logo {
+      height: 26px;
+      display: block;
+    }
+    .topbar-meta {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+      color: var(--fg-muted);
+      font: 500 var(--fs-sm)/1 var(--font-mono);
+    }
+    .page-header {
+      position: relative;
+      overflow: hidden;
+      background: var(--brand-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+    .page-header-inner {
+      max-width: 1280px;
+      margin: 0;
+      padding: var(--space-10) var(--space-6);
+      margin-inline: auto;
+    }
+    .crosshatch {
+      position: absolute;
+      right: -70px;
+      top: -80px;
+      width: 300px;
+      height: 300px;
+      pointer-events: none;
+      opacity: .08;
+      background:
+        repeating-linear-gradient(45deg, var(--fg) 0 1px, transparent 1px 18px),
+        repeating-linear-gradient(-45deg, var(--fg) 0 1px, transparent 1px 18px);
+    }
+    .eyebrow {
+      margin: 0 0 var(--space-2);
+      font: 500 var(--fs-xs)/1.2 var(--font-sans);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    h1 {
+      max-width: 820px;
+      margin: 0;
+      font: 700 var(--fs-4xl)/var(--lh-4xl) var(--font-display);
+      letter-spacing: -.012em;
+      color: var(--brand-primary);
+    }
+    .sub {
+      max-width: 760px;
+      margin: var(--space-3) 0 0;
+      color: var(--fg-subtle);
+      font: 400 var(--fs-md)/1.5 var(--font-sans);
     }
     main {
-      display: grid;
-      gap: 16px;
-      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+      max-width: 1280px;
       margin: 0 auto;
-      padding: 20px;
+      padding: var(--space-8) var(--space-6) var(--space-20);
     }
-    header {
-      border: 3px solid var(--black);
-      background: var(--red);
-      box-shadow: 6px 6px 0 0 var(--black);
-      padding: 16px;
-    }
-    h1, h2 {
-      margin: 0;
-      font-family: "Space Grotesk", Arial, sans-serif;
-      letter-spacing: 0;
-    }
-    h1 { font-size: clamp(30px, 7vw, 52px); line-height: 1; }
-    h2 { font-size: 22px; }
     .grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 16px;
+      gap: var(--space-4);
     }
-    section {
-      border: 3px solid var(--black);
-      background: var(--paper);
-      box-shadow: 5px 5px 0 0 var(--black);
-      padding: 14px;
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-5);
+    }
+    .card:hover { border-color: var(--border-strong); }
+    .section-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: var(--space-3);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: var(--space-2);
+      margin-bottom: var(--space-4);
+    }
+    h2 {
+      margin: 0;
+      font: 700 var(--fs-2xl)/var(--lh-2xl) var(--font-display);
+      letter-spacing: -.006em;
+      color: var(--fg);
+    }
+    .count {
+      display: inline-block;
+      margin-left: var(--space-2);
+      padding: 2px var(--space-2);
+      border-radius: var(--radius-pill);
+      background: var(--bg-muted);
+      color: var(--fg-muted);
+      font: 600 var(--fs-xs)/1 var(--font-sans);
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .metric {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-4);
+    }
+    .metric strong {
+      display: block;
+      color: var(--brand-primary);
+      font: 700 var(--fs-2xl)/1 var(--font-display);
+      letter-spacing: -.006em;
+    }
+    .metric span {
+      color: var(--fg-muted);
+      font: 500 var(--fs-xs)/1.3 var(--font-sans);
+      letter-spacing: .14em;
+      text-transform: uppercase;
     }
     label {
       display: block;
-      margin: 10px 0 4px;
-      font: 700 12px/1.2 "Space Mono", monospace;
-      text-transform: uppercase;
-      letter-spacing: .06em;
+      margin: var(--space-3) 0 var(--space-2);
+      color: var(--fg);
+      font: 500 var(--fs-base)/1 var(--font-sans);
     }
     input {
       width: 100%;
-      border: 2px solid var(--black);
-      background: var(--paper);
-      padding: 9px;
-      font: inherit;
-      border-radius: 0;
+      height: 36px;
+      border: 1px solid var(--input);
+      background: var(--bg);
+      color: var(--fg);
+      border-radius: var(--radius);
+      padding: 0 var(--space-3);
+      font: 400 var(--fs-base)/1 var(--font-sans);
+      outline: none;
+    }
+    input:focus {
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-primary) 18%, transparent);
     }
     button {
-      width: 100%;
-      min-height: 42px;
-      margin-top: 10px;
-      border: 3px solid var(--black);
-      background: var(--yellow);
-      color: var(--black);
-      box-shadow: 4px 4px 0 0 var(--black);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      min-height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: var(--brand-primary);
+      color: var(--fg-on-primary);
+      padding: 0 var(--space-4);
       cursor: pointer;
-      font: 700 12px/1.2 "Space Mono", monospace;
-      letter-spacing: .06em;
-      text-transform: uppercase;
+      font: 500 var(--fs-base)/var(--lh-base) var(--font-sans);
+      transition: background 150ms ease-out, border-color 150ms ease-out;
     }
-    button:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 0 var(--black); }
-    button.danger { background: var(--red); }
-    button.info { background: var(--blue); }
-    button.reset { background: var(--orange); }
-    .bar {
+    button:hover { background: var(--brand-primary-700); }
+    button.secondary {
+      background: var(--brand-secondary-deep);
+      color: var(--brand-primary);
+    }
+    button.secondary:hover { background: var(--brand-secondary-strong); }
+    button.outline {
+      background: var(--bg);
+      border-color: var(--border);
+      color: var(--fg);
+    }
+    button.outline:hover { background: var(--bg-muted); }
+    button.danger {
+      background: var(--destructive);
+      color: var(--fg-on-primary);
+    }
+    button.danger:hover { filter: brightness(.94); }
+    .button-stack {
+      display: grid;
+      gap: var(--space-2);
+      margin-top: var(--space-3);
+    }
+    .bar, .actions {
       display: flex;
-      gap: 10px;
+      gap: var(--space-2);
       align-items: stretch;
+      flex-wrap: wrap;
     }
-    .bar button { width: auto; min-width: 140px; margin-top: 0; }
+    .bar button, .actions button { min-width: 130px; }
     .table-wrap {
       overflow-x: auto;
-      border: 3px solid var(--black);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
     }
     table {
       width: 100%;
       border-collapse: collapse;
       min-width: 720px;
-      background: var(--paper);
+      background: var(--bg);
     }
     th, td {
-      border: 2px solid var(--black);
-      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      padding: var(--space-3) var(--space-4);
       text-align: left;
       vertical-align: middle;
+      font: 400 var(--fs-base)/1.35 var(--font-sans);
     }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: var(--brand-secondary); }
     th {
-      background: var(--yellow);
-      font: 700 12px/1.2 "Space Mono", monospace;
-      letter-spacing: .06em;
+      background: var(--bg-muted);
+      color: var(--fg-muted);
+      font: 500 var(--fs-xs)/1.2 var(--font-sans);
+      letter-spacing: .14em;
       text-transform: uppercase;
     }
-    tr.revoked td { background: #FFD6D6; }
+    td.mono { font-family: var(--font-mono); font-size: 13px; }
+    tr.revoked td { background: var(--destructive-bg); }
     .badge {
-      display: inline-block;
-      border: 2px solid var(--black);
-      background: var(--blue);
-      padding: 3px 6px;
-      font: 700 12px/1.2 "Space Mono", monospace;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      border: .5px solid currentColor;
+      border-radius: var(--radius-pill);
+      padding: 3px var(--space-2);
+      font: 500 var(--fs-sm)/1 var(--font-sans);
     }
-    .badge.valid { background: var(--green); }
-    .badge.revoked { background: var(--red); }
+    .badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge.valid, .badge.accept { background: var(--success-bg); color: var(--success); }
+    .badge.revoked, .badge.reject { background: var(--destructive-bg); color: var(--destructive); }
+    .badge.pending { background: var(--brand-secondary); color: var(--brand-primary); }
     pre {
-      min-height: 66px;
       margin: 0;
+      min-height: 74px;
       overflow: auto;
-      border: 3px solid var(--black);
-      background: var(--black);
-      color: var(--paper);
-      padding: 10px;
-      font: 12px/1.35 "Space Mono", monospace;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-muted);
+      color: var(--fg);
+      padding: var(--space-4);
+      font: 400 13px/1.45 var(--font-mono);
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .full { display: grid; gap: 12px; }
+    .full { display: grid; gap: var(--space-4); }
     @media (max-width: 820px) {
-      .grid { grid-template-columns: 1fr; }
-      .bar { flex-direction: column; }
-      .bar button { width: 100%; }
-      main { padding: 12px; }
+      .grid, .metrics { grid-template-columns: 1fr; }
+      .topbar-inner, .page-header-inner, main { padding-inline: var(--space-4); }
+      .bar button, .actions button { flex: 1 1 100%; }
+      h1 { font-size: 34px; line-height: 38px; }
     }
   </style>
 </head>
 <body>
+  <nav class="topbar">
+    <div class="topbar-inner">
+      <img class="logo" src="/design-assets/assets/credimi_logo.svg" alt="Credimi">
+      <div class="topbar-meta"><span>JWT</span><span>ES256</span><span>TSL</span></div>
+    </div>
+  </nav>
+  <header class="page-header">
+    <div class="crosshatch"></div>
+    <div class="page-header-inner">
+      <p class="eyebrow">EUDI conformance utility</p>
+      <h1>Token Status List console</h1>
+      <p class="sub">Create test credentials, revoke selected entries, and verify against the signed Status List Token.</p>
+    </div>
+  </header>
   <main>
-    <header>
-      <h1>TSL RED ROUTE</h1>
-    </header>
-
     <div class="grid">
-      <section>
-        <h2>Add Batch</h2>
-        <label for="count">count</label>
+      <section class="card">
+        <div class="section-header"><h2>Add batch:</h2></div>
+        <label for="count">Count:</label>
         <input id="count" type="number" min="1" max="500" value="10">
-        <label for="prefix">prefix</label>
+        <label for="prefix">Credential prefix:</label>
         <input id="prefix" value="cred">
-        <button id="create">Create Random</button>
+        <div class="button-stack">
+          <button id="create">Create random batch</button>
+        </div>
       </section>
-      <section>
-        <h2>Selected</h2>
-        <button id="verify" class="info">Verify Selected</button>
-        <button id="revoke" class="danger">Revoke Selected</button>
+      <section class="card">
+        <div class="section-header"><h2>Selected:</h2></div>
+        <div class="button-stack">
+          <button id="verify" class="secondary">Verify selected</button>
+          <button id="revoke" class="danger">Revoke selected</button>
+        </div>
       </section>
-      <section>
-        <h2>State</h2>
-        <button id="refresh">Refresh</button>
-        <button id="reset" class="reset">Reset</button>
+      <section class="card">
+        <div class="section-header"><h2>State:</h2></div>
+        <div class="button-stack">
+          <button id="refresh" class="outline">Refresh</button>
+          <button id="reset" class="outline">Reset</button>
+        </div>
       </section>
     </div>
 
-    <section class="full">
+    <section class="metrics" aria-label="Credential metrics">
+      <div class="metric"><strong id="total">0</strong><span>Total credentials</span></div>
+      <div class="metric"><strong id="valid">0</strong><span>Valid</span></div>
+      <div class="metric"><strong id="revoked">0</strong><span>Revoked</span></div>
+      <div class="metric"><strong id="verified">0</strong><span>Verified rows</span></div>
+    </section>
+
+    <section class="card full">
+      <div class="section-header">
+        <h2>Credentials <span id="row-count" class="count">0</span>:</h2>
+        <button id="token" class="outline">Fetch token</button>
+      </div>
       <div class="bar">
-        <button id="all">Select All</button>
-        <button id="none">Select None</button>
-        <button id="token" class="info">Fetch Token</button>
+        <button id="all" class="outline">Select all</button>
+        <button id="none" class="outline">Select none</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th></th>
-              <th>credential</th>
-              <th>idx</th>
-              <th>status</th>
-              <th>verify</th>
+              <th>Credential</th>
+              <th>Index</th>
+              <th>Status</th>
+              <th>Verification</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -236,8 +412,8 @@ def _red_ui_html() -> str:
       </div>
     </section>
 
-    <section class="full">
-      <h2>Output</h2>
+    <section class="card full">
+      <div class="section-header"><h2>Output:</h2></div>
       <pre id="out">ready</pre>
     </section>
   </main>
@@ -245,6 +421,11 @@ def _red_ui_html() -> str:
   <script>
     const rows = document.querySelector("#rows");
     const out = document.querySelector("#out");
+    const total = document.querySelector("#total");
+    const valid = document.querySelector("#valid");
+    const revoked = document.querySelector("#revoked");
+    const verified = document.querySelector("#verified");
+    const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
 
@@ -258,7 +439,9 @@ def _red_ui_html() -> str:
     }
 
     function selectedIds() {
-      return [...document.querySelectorAll("tbody input:checked")].map((box) => box.value);
+      return [...document.querySelectorAll("tbody input:checked")]
+        .map((box) => credentials[Number(box.value)]?.credential_id)
+        .filter(Boolean);
     }
 
     function write(value) {
@@ -277,19 +460,36 @@ def _red_ui_html() -> str:
     }
 
     function render() {
-      const selected = new Set(selectedIds());
-      rows.innerHTML = credentials.map((item) => {
+      const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
+      const counts = credentials.reduce((acc, item) => {
+        acc.total += 1;
+        if (item.status === "REVOKED") acc.revoked += 1;
+        if (item.status === "VALID") acc.valid += 1;
+        return acc;
+      }, { total: 0, valid: 0, revoked: 0 });
+      total.textContent = counts.total;
+      valid.textContent = counts.valid;
+      revoked.textContent = counts.revoked;
+      verified.textContent = Object.keys(verification).length;
+      rowCount.textContent = counts.total;
+
+      if (!credentials.length) {
+        rows.innerHTML = `<tr><td colspan="5">No credentials yet.</td></tr>`;
+        return;
+      }
+
+      rows.innerHTML = credentials.map((item, index) => {
         const safeCredentialId = escapeHtml(item.credential_id);
-        const checked = selected.has(item.credential_id) ? "checked" : "";
+        const checked = selectedIndexes.has(String(index)) ? "checked" : "";
         const key = item.credential_id;
         const result = verification[key]
-          ? `${escapeHtml(verification[key].result)} / ${escapeHtml(verification[key].status)}`
-          : "";
+          ? `<span class="badge ${escapeHtml(verification[key].result.toLowerCase())}">${escapeHtml(verification[key].result)} / ${escapeHtml(verification[key].status)}</span>`
+          : `<span class="badge pending">Not verified</span>`;
         const state = item.status.toLowerCase();
         return `<tr class="${state}">
-          <td><input type="checkbox" value="${safeCredentialId}" ${checked}></td>
-          <td>${safeCredentialId}</td>
-          <td>${item.idx}</td>
+          <td><input type="checkbox" value="${index}" ${checked}></td>
+          <td class="mono">${safeCredentialId}</td>
+          <td class="mono">${item.idx}</td>
           <td><span class="badge ${state}">${escapeHtml(item.status)}</span></td>
           <td>${result}</td>
         </tr>`;

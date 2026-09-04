@@ -16,9 +16,18 @@ def test_red_route_serves_lean_ui() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "TSL RED ROUTE" in response.text
+    assert "Credimi TSL console" in response.text
+    assert "/design-assets/assets/credimi_logo.svg" in response.text
+    assert "Token Status List console" in response.text
     assert "/credentials/random-batch" in response.text
     assert "/verify-batch" in response.text
+
+
+def test_credimi_logo_asset_is_served() -> None:
+    response = client.get("/design-assets/assets/credimi_logo.svg")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
 
 
 def test_random_batch_create_lists_credentials() -> None:

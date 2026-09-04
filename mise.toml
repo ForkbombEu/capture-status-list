@@ -1,0 +1,31 @@
+[tools]
+go = "1.26.2"
+node = "latest"
+python = "3.12"
+
+[tasks.test]
+run = "go test ./..."
+
+[tasks.pytest]
+run = "pytest"
+
+[tasks.fix]
+run = "go fix ./..."
+
+[tasks.format]
+run = "gofmt -w ."
+
+[tasks.lint]
+depends = ["lint:design"]
+
+[tasks."lint:design"]
+run = "if [ -f .puria/design/DESIGN.md ]; then npx --yes @google/design.md lint .puria/design/DESIGN.md; fi"
+
+[tasks.run]
+run = "go run ."
+
+[tasks.serve]
+run = "uvicorn app:app --reload"
+
+[tasks.build]
+run = "go build -o bin/starter ."

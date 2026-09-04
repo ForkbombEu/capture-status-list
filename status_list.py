@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import base64
+import math
+import time
+import zlib
+from typing import Iterable
+
+import jwt
+
+
+DEFAULT_BITS = 1
+DEFAULT_STATUS_LIST_SIZE = 10_000
+STATUS_VALID = 0x00
+STATUS_INVALID = 0x01
+TOKEN_TTL_SECONDS = 43_200
+ALLOWED_BITS = {1, 2, 4, 8}
+
+
+class InvalidStatusListIndex(ValueError):
+    def __init__(self, idx: int, size: int) -> None:
+        super().__init__(f"status-list index {idx} is outside 0..{size - 1}")
+        self.idx = idx
+        self.size = size
+
+
+def status_label(value: int) -> str:
+    if value == STATUS_VALID:
+        return "VALID"
+    if value == STATUS_INVALID:
+        return "REVOKED"
+    return f"UNKNOWN({value})"
+
+
+def base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def base64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+
+def pack_status_values(values: Iterable[int], bits: int = DEFAULT_BITS) -> bytes:
+    _validate_bits(bits)
+    statuses = list(values)
+    max_value = (1 << bits) - 1
+    byte_count = math.ceil(len(statuses) * bits / 8)
+    packed = bytearray(byte_count)
+
+    for idx, value in enumerate(statuses):
+        if value < 0 or value > max_value:
+            raise ValueError(f"status value {value} exceeds {bits}-bit capacity")
+        bit_offset = (idx * bits) % 8
+        byte_offset = (idx * bits) // 8
+        packed[byte_offset] |= value << bit_offset
+
+    return bytes(packed)
+
+
+def read_packed_status(packed: bytes, idx: int, bits: int = DEFAULT_BITS) -> int:
+    _validate_bits(bits)
+    size = len(packed) * 8 // bits
+    if idx < 0 or idx >= size:
+        raise InvalidStatusListIndex(idx, size)
+
+    bit_offset = (idx * bits) % 8
+    byte_offset = (idx * bits) // 8
+    mask = (1 << bits) - 1
+    return (packed[byte_offset] >> bit_offset) & mask
+
+
+def unpack_status_values(
+    packed: bytes,
+    bits: int = DEFAULT_BITS,
+    size: int | None = None,
+) -> list[int]:
+    _validate_bits(bits)
+    capacity = len(packed) * 8 // bits
+    result_size = capacity if size is None else size
+    if result_size < 0 or result_size > capacity:
+        raise InvalidStatusListIndex(result_size, capacity + 1)
+    return [read_packed_status(packed, idx, bits) for idx in range(result_size)]
+
+
+def encode_status_list(values: Iterable[int], bits: int = DEFAULT_BITS) -> str:
+    packed = pack_status_values(values, bits)
+    compressed = zlib.compress(packed, level=9)
+    return base64url_encode(compressed)
+
+
+def decode_status_list(
+    encoded: str,
+    bits: int = DEFAULT_BITS,
+    size: int | None = None,
+) -> list[int]:
+    packed = zlib.decompress(base64url_decode(encoded))
+    return unpack_status_values(packed, bits=bits, size=size)
+
+
+def read_encoded_status(encoded: str, idx: int, bits: int = DEFAULT_BITS) -> int:
+    packed = zlib.decompress(base64url_decode(encoded))
+    return read_packed_status(packed, idx, bits=bits)
+
+
+def generate_status_list(
+    values: Iterable[int],
+    bits: int = DEFAULT_BITS,
+    aggregation_uri: str | None = None,
+) -> dict[str, int | str]:
+    status_list: dict[str, int | str] = {
+        "bits": bits,
+        "lst": encode_status_list(values, bits=bits),
+    }
+    if aggregation_uri is not None:
+        status_list["aggregation_uri"] = aggregation_uri
+    return status_list
+
+
+def generate_status_list_token(
+    values: Iterable[int],
+    *,
+    private_key_pem: str,
+    issuer: str,
+    subject: str,
+    kid: str,
+    bits: int = DEFAULT_BITS,
+    ttl: int = TOKEN_TTL_SECONDS,
+) -> str:
+    now = int(time.time())
+    payload = {
+        "iss": issuer,
+        "sub": subject,
+        "iat": now,
+        "exp": now + ttl,
+        "ttl": ttl,
+        "status_list": generate_status_list(values, bits=bits),
+    }
+    headers = {
+        "alg": "ES256",
+        "kid": kid,
+        "typ": "statuslist+jwt",
+    }
+    return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
+
+
+def _validate_bits(bits: int) -> None:
+    if bits not in ALLOWED_BITS:
+        allowed = ", ".join(str(value) for value in sorted(ALLOWED_BITS))
+        raise ValueError(f"bits must be one of {allowed}: {bits}")

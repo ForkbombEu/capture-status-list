@@ -1,0 +1,238 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+
+from models import CredentialResponse, RevokeResponse
+from status_list import (
+    DEFAULT_BITS,
+    DEFAULT_STATUS_LIST_SIZE,
+    STATUS_INVALID,
+    STATUS_VALID,
+    InvalidStatusListIndex,
+    generate_status_list_token,
+    status_label,
+)
+
+
+ISSUER = "http://localhost:8000"
+STATUS_LIST_URI = f"{ISSUER}/status/1"
+KEY_ID = "mock-eudi-status-list-1"
+AUTO_INDEX_START = 42
+KEYS_DIR = Path(__file__).resolve().parent / "keys"
+PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
+PUBLIC_KEY_PATH = KEYS_DIR / "public.pem"
+
+
+@dataclass(frozen=True)
+class CredentialRecord:
+    credential_id: str
+    idx: int
+    status_list_uri: str = STATUS_LIST_URI
+
+    def status_reference(self) -> dict[str, dict[str, int | str]]:
+        return {
+            "status_list": {
+                "idx": self.idx,
+                "uri": self.status_list_uri,
+            }
+        }
+
+
+class TestKeyStore:
+    def __init__(self) -> None:
+        self._private_key = None
+
+    def private_key(self):
+        if self._private_key is None:
+            self._private_key = self._load_or_create_private_key()
+        return self._private_key
+
+    def private_pem(self) -> str:
+        return (
+            self.private_key()
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode("ascii")
+        )
+
+    def public_pem(self) -> str:
+        return (
+            self.private_key()
+            .public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode("ascii")
+        )
+
+    def jwks(self) -> dict[str, list[dict[str, str]]]:
+        numbers = self.private_key().public_key().public_numbers()
+        return {
+            "keys": [
+                {
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "kid": KEY_ID,
+                    "use": "sig",
+                    "alg": "ES256",
+                    "x": _base64url_uint(numbers.x, 32),
+                    "y": _base64url_uint(numbers.y, 32),
+                }
+            ]
+        }
+
+    def _load_or_create_private_key(self):
+        if PRIVATE_KEY_PATH.exists():
+            return serialization.load_pem_private_key(
+                PRIVATE_KEY_PATH.read_bytes(),
+                password=None,
+            )
+
+        KEYS_DIR.mkdir(parents=True, exist_ok=True)
+        key = ec.generate_private_key(ec.SECP256R1())
+        PRIVATE_KEY_PATH.write_bytes(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+        os.chmod(PRIVATE_KEY_PATH, 0o600)
+        PUBLIC_KEY_PATH.write_bytes(
+            key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        return key
+
+
+class InMemoryIssuer:
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.statuses = [STATUS_VALID] * DEFAULT_STATUS_LIST_SIZE
+        self.credentials: dict[str, CredentialRecord] = {}
+        self.next_idx = AUTO_INDEX_START
+
+    def create_credential(
+        self,
+        credential_id: str,
+        idx: int | None = None,
+    ) -> CredentialResponse:
+        if credential_id in self.credentials:
+            raise KeyError(f"credential already exists: {credential_id}")
+
+        assigned_idx = idx if idx is not None else self._next_unused_idx()
+        self._validate_unused_idx(assigned_idx)
+
+        record = CredentialRecord(credential_id=credential_id, idx=assigned_idx)
+        self.credentials[credential_id] = record
+        if assigned_idx >= self.next_idx:
+            self.next_idx = assigned_idx + 1
+        return CredentialResponse(
+            credential_id=record.credential_id,
+            idx=record.idx,
+            status_list_uri=record.status_list_uri,
+            referenced_token_status=record.status_reference(),
+        )
+
+    def revoke_credential(self, credential_id: str) -> RevokeResponse:
+        record = self.get_credential(credential_id)
+        self.statuses[record.idx] = STATUS_INVALID
+        return RevokeResponse(
+            credential_id=record.credential_id,
+            idx=record.idx,
+            status="REVOKED",
+        )
+
+    def get_credential(self, credential_id: str) -> CredentialRecord:
+        try:
+            return self.credentials[credential_id]
+        except KeyError as exc:
+            raise KeyError(f"unknown credential: {credential_id}") from exc
+
+    def debug_status(self, idx: int) -> str:
+        if idx < 0 or idx >= len(self.statuses):
+            raise InvalidStatusListIndex(idx, len(self.statuses))
+        return status_label(self.statuses[idx])
+
+    def status_list_token(self, private_key_pem: str) -> str:
+        return generate_status_list_token(
+            self.statuses,
+            private_key_pem=private_key_pem,
+            issuer=ISSUER,
+            subject=STATUS_LIST_URI,
+            kid=KEY_ID,
+            bits=DEFAULT_BITS,
+        )
+
+    def _next_unused_idx(self) -> int:
+        used = {record.idx for record in self.credentials.values()}
+        idx = self.next_idx
+        while idx in used:
+            idx += 1
+        return idx
+
+    def _validate_unused_idx(self, idx: int) -> None:
+        if idx < 0 or idx >= len(self.statuses):
+            raise ValueError(
+                f"idx must be between 0 and {len(self.statuses) - 1}: {idx}"
+            )
+        if any(record.idx == idx for record in self.credentials.values()):
+            raise KeyError(f"idx already assigned: {idx}")
+
+
+def _base64url_uint(value: int, size: int) -> str:
+    from status_list import base64url_encode
+
+    return base64url_encode(value.to_bytes(size, "big"))
+
+
+key_store = TestKeyStore()
+issuer_state = InMemoryIssuer()
+
+
+def create_credential_record(
+    credential_id: str,
+    idx: int | None = None,
+) -> CredentialResponse:
+    return issuer_state.create_credential(credential_id, idx=idx)
+
+
+def revoke_credential_record(credential_id: str) -> RevokeResponse:
+    return issuer_state.revoke_credential(credential_id)
+
+
+def get_credential_record(credential_id: str) -> CredentialRecord:
+    return issuer_state.get_credential(credential_id)
+
+
+def debug_status_at(idx: int) -> str:
+    return issuer_state.debug_status(idx)
+
+
+def generate_current_status_list_token() -> str:
+    return issuer_state.status_list_token(key_store.private_pem())
+
+
+def public_jwks() -> dict[str, list[dict[str, str]]]:
+    return key_store.jwks()
+
+
+def public_key_pem() -> str:
+    return key_store.public_pem()
+
+
+def reset_state() -> None:
+    issuer_state.reset()

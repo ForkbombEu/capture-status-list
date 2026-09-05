@@ -1,8 +1,11 @@
+import zlib
 from pathlib import Path
 from uuid import uuid4
 
+import jwt
+
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from issuer import (
@@ -27,12 +30,22 @@ from models import (
     RandomBatchCreateRequest,
     RandomBatchCreateResponse,
     ResetResponse,
+    StatusListAssignment,
+    StatusListBits,
+    StatusListDebugResponse,
     RevokeBatchResponse,
     RevokeResponse,
     VerifyBatchResponse,
     VerifyResponse,
 )
-from status_list import InvalidStatusListIndex
+from status_list import (
+    STATUS_INVALID,
+    InvalidStatusListIndex,
+    base64url_decode,
+    status_label,
+    unpack_status_values,
+)
+from ui import console_html, docs_html
 from verifier import VerificationError, check_status
 
 
@@ -40,526 +53,15 @@ app = FastAPI(
     title="Mock EUDI Token Status List Server",
     version="0.1.0",
     description="Minimal FCA test harness using an IETF Token Status List JWT.",
+    docs_url=None,
+    redoc_url=None,
 )
 
-DESIGN_DIR = Path(__file__).resolve().parent / ".puria" / "design"
-app.mount("/design-assets", StaticFiles(directory=DESIGN_DIR), name="design-assets")
-
-
-def _red_ui_html() -> str:
-    return """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Credimi TSL console</title>
-  <link rel="stylesheet" href="/design-assets/colors_and_type.css">
-  <style>
-    * { box-sizing: border-box; }
-    html { background: var(--bg-tint); }
-    body {
-      margin: 0;
-      background: var(--bg-tint);
-      color: var(--fg);
-      font: 400 var(--fs-base)/var(--lh-base) var(--font-sans);
-    }
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
-    }
-    .topbar-inner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-4);
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: var(--space-3) var(--space-6);
-    }
-    .logo {
-      height: 26px;
-      display: block;
-    }
-    .topbar-meta {
-      display: flex;
-      gap: var(--space-2);
-      align-items: center;
-      color: var(--fg-muted);
-      font: 500 var(--fs-sm)/1 var(--font-mono);
-    }
-    .page-header {
-      position: relative;
-      overflow: hidden;
-      background: var(--brand-secondary);
-      border-bottom: 1px solid var(--border);
-    }
-    .page-header-inner {
-      max-width: 1280px;
-      margin: 0;
-      padding: var(--space-10) var(--space-6);
-      margin-inline: auto;
-    }
-    .crosshatch {
-      position: absolute;
-      right: -70px;
-      top: -80px;
-      width: 300px;
-      height: 300px;
-      pointer-events: none;
-      opacity: .08;
-      background:
-        repeating-linear-gradient(45deg, var(--fg) 0 1px, transparent 1px 18px),
-        repeating-linear-gradient(-45deg, var(--fg) 0 1px, transparent 1px 18px);
-    }
-    .eyebrow {
-      margin: 0 0 var(--space-2);
-      font: 500 var(--fs-xs)/1.2 var(--font-sans);
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      color: var(--fg-muted);
-    }
-    h1 {
-      max-width: 820px;
-      margin: 0;
-      font: 700 var(--fs-4xl)/var(--lh-4xl) var(--font-display);
-      letter-spacing: -.012em;
-      color: var(--brand-primary);
-    }
-    .sub {
-      max-width: 760px;
-      margin: var(--space-3) 0 0;
-      color: var(--fg-subtle);
-      font: 400 var(--fs-md)/1.5 var(--font-sans);
-    }
-    main {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-6);
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: var(--space-8) var(--space-6) var(--space-20);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: var(--space-5);
-    }
-    .card:hover { border-color: var(--border-strong); }
-    .section-header {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: var(--space-3);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: var(--space-2);
-      margin-bottom: var(--space-4);
-    }
-    h2 {
-      margin: 0;
-      font: 700 var(--fs-2xl)/var(--lh-2xl) var(--font-display);
-      letter-spacing: -.006em;
-      color: var(--fg);
-    }
-    .count {
-      display: inline-block;
-      margin-left: var(--space-2);
-      padding: 2px var(--space-2);
-      border-radius: var(--radius-pill);
-      background: var(--bg-muted);
-      color: var(--fg-muted);
-      font: 600 var(--fs-xs)/1 var(--font-sans);
-    }
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: var(--space-3);
-    }
-    .metric {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: var(--space-4);
-    }
-    .metric strong {
-      display: block;
-      color: var(--brand-primary);
-      font: 700 var(--fs-2xl)/1 var(--font-display);
-      letter-spacing: -.006em;
-    }
-    .metric span {
-      color: var(--fg-muted);
-      font: 500 var(--fs-xs)/1.3 var(--font-sans);
-      letter-spacing: .14em;
-      text-transform: uppercase;
-    }
-    label {
-      display: block;
-      margin: var(--space-3) 0 var(--space-2);
-      color: var(--fg);
-      font: 500 var(--fs-base)/1 var(--font-sans);
-    }
-    input {
-      width: 100%;
-      height: 36px;
-      border: 1px solid var(--input);
-      background: var(--bg);
-      color: var(--fg);
-      border-radius: var(--radius);
-      padding: 0 var(--space-3);
-      font: 400 var(--fs-base)/1 var(--font-sans);
-      outline: none;
-    }
-    input:focus {
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand-primary) 18%, transparent);
-    }
-    button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-2);
-      min-height: 40px;
-      border: 1px solid transparent;
-      border-radius: var(--radius);
-      background: var(--brand-primary);
-      color: var(--fg-on-primary);
-      padding: 0 var(--space-4);
-      cursor: pointer;
-      font: 500 var(--fs-base)/var(--lh-base) var(--font-sans);
-      transition: background 150ms ease-out, border-color 150ms ease-out;
-    }
-    button:hover { background: var(--brand-primary-700); }
-    button.secondary {
-      background: var(--brand-secondary-deep);
-      color: var(--brand-primary);
-    }
-    button.secondary:hover { background: var(--brand-secondary-strong); }
-    button.outline {
-      background: var(--bg);
-      border-color: var(--border);
-      color: var(--fg);
-    }
-    button.outline:hover { background: var(--bg-muted); }
-    button.danger {
-      background: var(--destructive);
-      color: var(--fg-on-primary);
-    }
-    button.danger:hover { filter: brightness(.94); }
-    .button-stack {
-      display: grid;
-      gap: var(--space-2);
-      margin-top: var(--space-3);
-    }
-    .bar, .actions {
-      display: flex;
-      gap: var(--space-2);
-      align-items: stretch;
-      flex-wrap: wrap;
-    }
-    .bar button, .actions button { min-width: 130px; }
-    .table-wrap {
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--bg);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 720px;
-      background: var(--bg);
-    }
-    th, td {
-      border-bottom: 1px solid var(--border);
-      padding: var(--space-3) var(--space-4);
-      text-align: left;
-      vertical-align: middle;
-      font: 400 var(--fs-base)/1.35 var(--font-sans);
-    }
-    tbody tr:last-child td { border-bottom: 0; }
-    tbody tr:hover td { background: var(--brand-secondary); }
-    th {
-      background: var(--bg-muted);
-      color: var(--fg-muted);
-      font: 500 var(--fs-xs)/1.2 var(--font-sans);
-      letter-spacing: .14em;
-      text-transform: uppercase;
-    }
-    td.mono { font-family: var(--font-mono); font-size: 13px; }
-    tr.revoked td { background: var(--destructive-bg); }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      border: .5px solid currentColor;
-      border-radius: var(--radius-pill);
-      padding: 3px var(--space-2);
-      font: 500 var(--fs-sm)/1 var(--font-sans);
-    }
-    .badge::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-    .badge.valid, .badge.accept { background: var(--success-bg); color: var(--success); }
-    .badge.revoked, .badge.reject { background: var(--destructive-bg); color: var(--destructive); }
-    .badge.pending { background: var(--brand-secondary); color: var(--brand-primary); }
-    pre {
-      margin: 0;
-      min-height: 74px;
-      overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--bg-muted);
-      color: var(--fg);
-      padding: var(--space-4);
-      font: 400 13px/1.45 var(--font-mono);
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .full { display: grid; gap: var(--space-4); }
-    @media (max-width: 820px) {
-      .grid, .metrics { grid-template-columns: 1fr; }
-      .topbar-inner, .page-header-inner, main { padding-inline: var(--space-4); }
-      .bar button, .actions button { flex: 1 1 100%; }
-      h1 { font-size: 34px; line-height: 38px; }
-    }
-  </style>
-</head>
-<body>
-  <nav class="topbar">
-    <div class="topbar-inner">
-      <img class="logo" src="/design-assets/assets/credimi_logo.svg" alt="Credimi">
-      <div class="topbar-meta"><span>JWT</span><span>ES256</span><span>TSL</span></div>
-    </div>
-  </nav>
-  <header class="page-header">
-    <div class="crosshatch"></div>
-    <div class="page-header-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>Token Status List console</h1>
-      <p class="sub">Create test credentials, revoke selected entries, and verify against the signed Status List Token.</p>
-    </div>
-  </header>
-  <main>
-    <div class="grid">
-      <section class="card">
-        <div class="section-header"><h2>Add batch:</h2></div>
-        <label for="count">Count:</label>
-        <input id="count" type="number" min="1" max="500" value="10">
-        <label for="prefix">Credential prefix:</label>
-        <input id="prefix" value="cred">
-        <div class="button-stack">
-          <button id="create">Create random batch</button>
-        </div>
-      </section>
-      <section class="card">
-        <div class="section-header"><h2>Selected:</h2></div>
-        <div class="button-stack">
-          <button id="verify" class="secondary">Verify selected</button>
-          <button id="revoke" class="danger">Revoke selected</button>
-        </div>
-      </section>
-      <section class="card">
-        <div class="section-header"><h2>State:</h2></div>
-        <div class="button-stack">
-          <button id="refresh" class="outline">Refresh</button>
-          <button id="reset" class="outline">Reset</button>
-        </div>
-      </section>
-    </div>
-
-    <section class="metrics" aria-label="Credential metrics">
-      <div class="metric"><strong id="total">0</strong><span>Total credentials</span></div>
-      <div class="metric"><strong id="valid">0</strong><span>Valid</span></div>
-      <div class="metric"><strong id="revoked">0</strong><span>Revoked</span></div>
-      <div class="metric"><strong id="verified">0</strong><span>Verified rows</span></div>
-    </section>
-
-    <section class="card full">
-      <div class="section-header">
-        <h2>Credentials <span id="row-count" class="count">0</span>:</h2>
-        <button id="token" class="outline">Fetch token</button>
-      </div>
-      <div class="bar">
-        <button id="all" class="outline">Select all</button>
-        <button id="none" class="outline">Select none</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th>Credential</th>
-              <th>Index</th>
-              <th>Status</th>
-              <th>Verification</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card full">
-      <div class="section-header"><h2>Output:</h2></div>
-      <pre id="out">ready</pre>
-    </section>
-  </main>
-
-  <script>
-    const rows = document.querySelector("#rows");
-    const out = document.querySelector("#out");
-    const total = document.querySelector("#total");
-    const valid = document.querySelector("#valid");
-    const revoked = document.querySelector("#revoked");
-    const verified = document.querySelector("#verified");
-    const rowCount = document.querySelector("#row-count");
-    let credentials = [];
-    let verification = {};
-
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
-    }
-
-    function selectedIds() {
-      return [...document.querySelectorAll("tbody input:checked")]
-        .map((box) => credentials[Number(box.value)]?.credential_id)
-        .filter(Boolean);
-    }
-
-    function write(value) {
-      out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-    }
-
-    async function jsonFetch(url, options = {}) {
-      const response = await fetch(url, {
-        headers: { "content-type": "application/json", ...(options.headers || {}) },
-        ...options,
-      });
-      const type = response.headers.get("content-type") || "";
-      const body = type.includes("application/json") ? await response.json() : await response.text();
-      if (!response.ok) throw body;
-      return body;
-    }
-
-    function render() {
-      const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
-      const counts = credentials.reduce((acc, item) => {
-        acc.total += 1;
-        if (item.status === "REVOKED") acc.revoked += 1;
-        if (item.status === "VALID") acc.valid += 1;
-        return acc;
-      }, { total: 0, valid: 0, revoked: 0 });
-      total.textContent = counts.total;
-      valid.textContent = counts.valid;
-      revoked.textContent = counts.revoked;
-      verified.textContent = Object.keys(verification).length;
-      rowCount.textContent = counts.total;
-
-      if (!credentials.length) {
-        rows.innerHTML = `<tr><td colspan="5">No credentials yet.</td></tr>`;
-        return;
-      }
-
-      rows.innerHTML = credentials.map((item, index) => {
-        const safeCredentialId = escapeHtml(item.credential_id);
-        const checked = selectedIndexes.has(String(index)) ? "checked" : "";
-        const key = item.credential_id;
-        const result = verification[key]
-          ? `<span class="badge ${escapeHtml(verification[key].result.toLowerCase())}">${escapeHtml(verification[key].result)} / ${escapeHtml(verification[key].status)}</span>`
-          : `<span class="badge pending">Not verified</span>`;
-        const state = item.status.toLowerCase();
-        return `<tr class="${state}">
-          <td><input type="checkbox" value="${index}" ${checked}></td>
-          <td class="mono">${safeCredentialId}</td>
-          <td class="mono">${item.idx}</td>
-          <td><span class="badge ${state}">${escapeHtml(item.status)}</span></td>
-          <td>${result}</td>
-        </tr>`;
-      }).join("");
-    }
-
-    async function load() {
-      const data = await jsonFetch("/credentials");
-      credentials = data.credentials;
-      render();
-    }
-
-    document.querySelector("#create").onclick = async () => {
-      const body = {
-        count: Number(document.querySelector("#count").value || 10),
-        prefix: document.querySelector("#prefix").value || "cred",
-      };
-      const data = await jsonFetch("/credentials/random-batch", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      write(data);
-      await load();
-    };
-
-    document.querySelector("#revoke").onclick = async () => {
-      const ids = selectedIds();
-      if (!ids.length) return write("select credentials first");
-      const data = await jsonFetch("/credentials/revoke-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      write(data);
-      await load();
-    };
-
-    document.querySelector("#verify").onclick = async () => {
-      const ids = selectedIds();
-      if (!ids.length) return write("select credentials first");
-      const data = await jsonFetch("/verify-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      verification = Object.fromEntries(data.verified.map((item) => [item.credential_id, item]));
-      write(data);
-      render();
-    };
-
-    document.querySelector("#refresh").onclick = load;
-    document.querySelector("#all").onclick = () => {
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
-    };
-    document.querySelector("#none").onclick = () => {
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = false; });
-    };
-    document.querySelector("#token").onclick = async () => {
-      const token = await jsonFetch("/status/1", { headers: { accept: "application/statuslist+jwt" } });
-      write(token);
-    };
-    document.querySelector("#reset").onclick = async () => {
-      const data = await jsonFetch("/reset", { method: "POST" });
-      verification = {};
-      write(data);
-      await load();
-    };
-
-    load().catch(write);
-  </script>
-</body>
-</html>"""
+# Runtime copies of the canonical Credimi brand assets. `fonts/` stays a
+# sibling of `style.css` so the relative url() in each @font-face resolves.
+BRAND_DIR = Path(__file__).resolve().parent / "brand"
+FAVICON = BRAND_DIR / "logos" / "credimi_logo.svg"
+app.mount("/brand", StaticFiles(directory=BRAND_DIR), name="brand")
 
 
 def _verify_record(credential_id: str, token: str | None = None) -> VerifyResponse:
@@ -588,12 +90,17 @@ def _verify_record(credential_id: str, token: str | None = None) -> VerifyRespon
 
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
-    return HTMLResponse(_red_ui_html())
+    return HTMLResponse(console_html())
 
 
-@app.get("/red", response_class=HTMLResponse)
-def red_route() -> HTMLResponse:
-    return HTMLResponse(_red_ui_html())
+@app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
+def docs() -> HTMLResponse:
+    return HTMLResponse(docs_html(app.openapi_url or "/openapi.json"))
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(FAVICON, media_type="image/svg+xml")
 
 
 @app.get("/credentials", response_model=CredentialListResponse)
@@ -696,6 +203,92 @@ def debug_status(idx: int) -> DebugStatusResponse:
     except InvalidStatusListIndex as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DebugStatusResponse(idx=idx, status=status)
+
+
+@app.get("/debug/status-list", response_model=StatusListDebugResponse)
+def debug_status_list() -> StatusListDebugResponse:
+    """Decode the current Status List Token into its human-readable parts.
+
+    Test infrastructure: it exposes the token header, payload, the inflated
+    `lst` bit string and the signing JWKS in one response so the console can
+    show what `GET /status/1` actually carries.
+    """
+    token = generate_current_status_list_token()
+    header = jwt.get_unverified_header(token)
+    payload = jwt.decode(token, options={"verify_signature": False})
+
+    status_list = payload["status_list"]
+    bits = status_list["bits"]
+    compressed = base64url_decode(status_list["lst"])
+    inflated = zlib.decompress(compressed)
+    statuses = unpack_status_values(inflated, bits=bits)
+    revoked_indices = [
+        idx for idx, value in enumerate(statuses) if value == STATUS_INVALID
+    ]
+    assignments = [
+        StatusListAssignment(
+            idx=record.idx,
+            credential_id=record.credential_id,
+            status=status_label(statuses[record.idx]),
+        )
+        for record in list_credential_records()
+    ]
+
+    return StatusListDebugResponse(
+        token=token,
+        header=header,
+        payload=payload,
+        bits=bits,
+        size=len(statuses),
+        valid=len(statuses) - len(revoked_indices),
+        revoked=len(revoked_indices),
+        revoked_indices=revoked_indices,
+        lst=_status_list_bits(
+            statuses,
+            bits=bits,
+            compressed_bytes=len(compressed),
+            inflated_bytes=len(inflated),
+            around=[record.idx for record in list_credential_records()],
+        ),
+        assignments=assignments,
+        jwks=public_jwks(),
+    )
+
+
+STATUS_BITS_WINDOW = 256
+
+
+def _status_list_bits(
+    statuses: list[int],
+    *,
+    bits: int,
+    compressed_bytes: int,
+    inflated_bytes: int,
+    around: list[int],
+) -> StatusListBits:
+    """Render a readable slice of the inflated status array.
+
+    The list holds 10,000 entries, so the console shows a window of
+    `STATUS_BITS_WINDOW` entries, aligned to a 64-entry row and positioned to
+    contain the assigned indices when there are any.
+    """
+    chars_per_entry = 2 if bits == 8 else 1
+    first = min(around) if around else 0
+    start = max(0, (first // 64) * 64)
+    start = min(start, max(0, len(statuses) - STATUS_BITS_WINDOW))
+    window_values = statuses[start : start + STATUS_BITS_WINDOW]
+
+    return StatusListBits(
+        compressed_bytes=compressed_bytes,
+        inflated_bytes=inflated_bytes,
+        entries=len(statuses),
+        chars_per_entry=chars_per_entry,
+        window_start=start,
+        window_size=len(window_values),
+        window="".join(
+            format(value, "x").rjust(chars_per_entry, "0") for value in window_values
+        ),
+    )
 
 
 @app.post("/reset", response_model=ResetResponse)

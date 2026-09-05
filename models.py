@@ -76,6 +76,43 @@ class DebugStatusResponse(BaseModel):
     status: str
 
 
+class StatusListAssignment(BaseModel):
+    idx: int
+    credential_id: str
+    status: str
+
+
+class StatusListBits(BaseModel):
+    """The inflated `lst` byte array, rendered for human reading.
+
+    `window` holds one hex digit per entry (two when `bits` is 8), so a
+    1-bit list reads as a run of `0` and `1` characters.
+    """
+
+    compressed_bytes: int
+    inflated_bytes: int
+    entries: int
+    chars_per_entry: int
+    window_start: int
+    window_size: int
+    window: str
+
+
+class StatusListDebugResponse(BaseModel):
+    warning: str = "TEST/DEBUG ONLY"
+    token: str
+    header: dict[str, str]
+    payload: dict
+    bits: int
+    size: int
+    valid: int
+    revoked: int
+    revoked_indices: list[int]
+    lst: StatusListBits
+    assignments: list[StatusListAssignment]
+    jwks: dict[str, list[dict[str, str]]]
+
+
 class ResetResponse(BaseModel):
     status: str = "RESET"
     size: int = 10000

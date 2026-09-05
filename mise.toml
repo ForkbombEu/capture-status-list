@@ -2,12 +2,19 @@
 go = "1.26.2"
 node = "latest"
 python = "3.12"
+uv = "latest"
+docker-cli = "system"
 
 [tasks.test]
 run = "go test ./..."
 
+[tasks.setup]
+description = "Create .venv and install the Python dependencies"
+run = "test -x .venv/bin/python || uv venv .venv; uv pip install --quiet --python .venv/bin/python -r requirements.txt"
+
 [tasks.pytest]
-run = "pytest"
+depends = ["setup"]
+run = ".venv/bin/pytest"
 
 [tasks.fix]
 run = "go fix ./..."
@@ -25,10 +32,18 @@ run = "if [ -f .puria/design/DESIGN.md ]; then npx --yes @google/design.md lint 
 run = "go run ."
 
 [tasks.serve]
-run = "uvicorn app:app --reload"
+depends = ["setup"]
+run = ".venv/bin/uvicorn app:app --reload"
+
+[tasks."docker:build"]
+run = "docker build -t capture-status-list ."
+
+[tasks."docker:run"]
+run = "docker run --rm -p 8000:8000 -v capture-status-list-keys:/app/keys capture-status-list"
 
 [tasks.seed]
-run = "python seed.py"
+depends = ["setup"]
+run = ".venv/bin/python seed.py"
 
 [tasks.build]
 run = "go build -o bin/starter ."

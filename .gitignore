@@ -153,3 +153,6 @@ Desktop.ini
 .task/
 .codex/
 .agents/
+
+# Python virtualenv for the FastAPI app (mise tasks use it)
+.venv/

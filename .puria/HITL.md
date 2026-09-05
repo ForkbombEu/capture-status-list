@@ -52,3 +52,9 @@ If unsure:
 ---
 
 ## Entries
+
+- id: hitl-0001
+- observation: `PURIA.md` mandates a neubrutalist design system, while `.puria/design/DESIGN.md` is the Credimi brand specification, which is calm, flat, hairline-bordered and explicitly forbids the neubrutalist traits (thick borders, hard offset shadows, square corners).
+- location: `PURIA.md` "Design Source"; `.puria/design/DESIGN.md`
+- evidence: `PURIA.md` requires "thick, explicit borders", "hard offset shadows", "square or near-square corners"; `.puria/design/DESIGN.md` §7 requires a 6px canonical radius and "almost flat" elevation, and §15 forbids shadows on cards by default.
+- rationale: Both documents are declared authoritative for design. The UI follows `.puria/design/DESIGN.md`, because `PURIA.md` names `.puria/design/DESIGN.md` the source of truth for design when present, and because this repository is a Credimi Extra whose brand is set by the `credimi-extras-template` repository. A human must decide whether `PURIA.md` keeps the neubrutalist clause for Credimi Extras repositories.

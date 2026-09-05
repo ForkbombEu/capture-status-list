@@ -104,3 +104,58 @@ def test_status_indexes_are_not_global_user_identifiers() -> None:
     assert first["referenced_token_status"] != second["referenced_token_status"]
     assert set(first["referenced_token_status"]["status_list"]) == {"idx", "uri"}
     assert set(second["referenced_token_status"]["status_list"]) == {"idx", "uri"}
+
+
+def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
+    import jwt
+    from fastapi.testclient import TestClient
+
+    from app import app
+    from issuer import reset_state
+
+    client = TestClient(app)
+    reset_state()
+    client.post("/credentials", json={"credential_id": "cred-001"})
+    client.post("/credentials", json={"credential_id": "cred-002"})
+    client.post("/credentials/cred-001/revoke")
+
+    decoded = client.get("/debug/status-list").json()
+
+    assert decoded["warning"] == "TEST/DEBUG ONLY"
+    assert decoded["token"].count(".") == 2
+    assert decoded["header"] == {
+        "alg": "ES256",
+        "kid": "mock-eudi-status-list-1",
+        "typ": "statuslist+jwt",
+    }
+    assert decoded["payload"]["sub"] == "http://localhost:8000/status/1"
+    assert decoded["payload"]["status_list"]["bits"] == 1
+    assert decoded["bits"] == 1
+    assert decoded["size"] == 10000
+    assert decoded["revoked"] == 1
+    assert decoded["valid"] == 9999
+    assert decoded["revoked_indices"] == [42]
+    assert decoded["assignments"] == [
+        {"idx": 42, "credential_id": "cred-001", "status": "REVOKED"},
+        {"idx": 43, "credential_id": "cred-002", "status": "VALID"},
+    ]
+    lst = decoded["lst"]
+    assert lst["entries"] == 10000
+    assert lst["inflated_bytes"] == 1250
+    assert lst["compressed_bytes"] < lst["inflated_bytes"]
+    assert lst["chars_per_entry"] == 1
+    assert lst["window_start"] == 0
+    assert lst["window_size"] == 256
+    assert len(lst["window"]) == 256
+    assert lst["window"][42] == "1"
+    assert lst["window"][43] == "0"
+    assert set(lst["window"]) == {"0", "1"}
+
+    assert decoded["jwks"]["keys"][0]["kid"] == "mock-eudi-status-list-1"
+    # ES256 signatures are randomized and each call re-issues the token, so
+    # compare the encoded list rather than the token bytes.
+    served = client.get(
+        "/status/1", headers={"accept": "application/statuslist+jwt"}
+    ).text.strip('"')
+    served_payload = jwt.decode(served, options={"verify_signature": False})
+    assert served_payload["status_list"] == decoded["payload"]["status_list"]

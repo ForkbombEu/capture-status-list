@@ -106,7 +106,7 @@ def main() -> int:
         f"{result['accepted']} accepted, "
         f"{result['rejected']} rejected"
     )
-    print(f"open {args.base_url.rstrip('/')}/red")
+    print(f"open {args.base_url.rstrip('/')}/")
     return 0
 
 

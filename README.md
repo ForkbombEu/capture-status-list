@@ -44,11 +44,21 @@ The status list contains 10,000 entries by default. All entries start as
 ## Run
 
 ```sh
-pip install -r requirements.txt
-uvicorn app:app --reload
+mise run serve
 ```
 
-Open the small local UI at `http://localhost:8000/red`.
+`serve` depends on `setup`, which creates `.venv/` with `uv` and installs
+`requirements.txt` into it. Every Python task (`serve`, `pytest`, `seed`) runs
+from that virtualenv, so nothing is installed into the global interpreter.
+Without mise:
+
+```sh
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app:app --reload
+```
+
+Open the console at `http://localhost:8000/` and the branded API documentation
+at `http://localhost:8000/docs`.
 
 Seed demo UI data after the server is running:
 
@@ -80,10 +90,38 @@ restarts. Run without the volume for ephemeral local testing:
 docker run --rm -p 8000:8000 capture-status-list
 ```
 
+## Design
+
+The user interface follows the Credimi Extras brand. `.puria/design/DESIGN.md`
+is the design source; `brand/` holds the runtime copies of the canonical
+assets, installed unchanged from the `credimi-extras-template` repository:
+
+```text
+brand/style.css                            brand stylesheet, loaded first
+brand/fonts/InterVariable.ttf              brand sans      (SIL OFL 1.1)
+brand/fonts/SourceCodeProVariable.ttf      brand monospace (SIL OFL 1.1)
+brand/logos/credimi_logo.svg               mark, dark — also /favicon.svg
+brand/logos/credimi_logo_negative.svg      mark, negative
+brand/logos/credimi_logo-transp.svg        wordmark, dark
+brand/logos/credimi_logo-transp_white.svg  wordmark, white
+```
+
+The whole directory is served at `/brand`, so `fonts/` stays a sibling of
+`style.css` and the self-hosted `@font-face` rules resolve. No fonts are
+fetched from a third party. The application stylesheet lives in `ui.py` and
+loads after `brand/style.css`; it declares only what the brand foundation does
+not provide. The four logos are frozen: `tests/test_brand.py` checks the
+runtime copies against the SHA-256 digests pinned in `.puria/design/DESIGN.md`
+§1.
+
+Every HTML page, the API documentation included, carries the same chrome: the
+Credimi Extras top strip, the topbar wordmark, the deep-indigo footer with the
+ForkBomb sub-bar, and the Credimi Extras bottom strip.
+
 ## Test
 
 ```sh
-pytest
+mise run pytest
 ```
 
 Repository policy validation is available through mise:
@@ -188,6 +226,16 @@ Read a raw status value through the debug-only endpoint:
 
 ```sh
 curl http://localhost:8000/debug/status/42
+```
+
+Decode the current Status List Token — header, payload, the inflated `lst`
+and the signing JWKS — through the debug-only endpoint the console uses. The
+`lst` field carries the compressed and inflated byte counts plus a readable
+window of the inflated entries, one hex digit per entry (`0` valid, `1`
+revoked at `bits = 1`):
+
+```sh
+curl http://localhost:8000/debug/status-list
 ```
 
 Reset all in-memory test state:

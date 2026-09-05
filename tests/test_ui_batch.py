@@ -11,23 +11,21 @@ def setup_function() -> None:
     reset_state()
 
 
-def test_red_route_serves_lean_ui() -> None:
-    response = client.get("/red")
+def test_console_is_served_at_the_root() -> None:
+    response = client.get("/")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Credimi TSL console" in response.text
-    assert "/design-assets/assets/credimi_logo.svg" in response.text
-    assert "Token Status List console" in response.text
+    assert "Token status list console" in response.text
+    assert "/brand/style.css" in response.text
+    assert "/brand/logos/credimi_logo-transp.svg" in response.text
     assert "/credentials/random-batch" in response.text
     assert "/verify-batch" in response.text
+    assert "/debug/status-list" in response.text
 
 
-def test_credimi_logo_asset_is_served() -> None:
-    response = client.get("/design-assets/assets/credimi_logo.svg")
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("image/svg+xml")
+def test_red_route_is_gone() -> None:
+    assert client.get("/red").status_code == 404
 
 
 def test_random_batch_create_lists_credentials() -> None:

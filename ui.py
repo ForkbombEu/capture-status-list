@@ -286,8 +286,16 @@ APP_CSS = """
       position: absolute;
       inset-inline: 0;
       border: 2px solid var(--brand-accent);
-      pointer-events: none;
+      background: var(--brand-secondary-strong);
+      opacity: 0.35;
+      cursor: grab;
+      touch-action: none;
       z-index: 1;
+    }
+    .bitmap-minimap-viewport:active,
+    .bitmap-minimap-viewport.dragging {
+      cursor: grabbing;
+      opacity: 0.5;
     }
     .bitmap-minimap-empty {
       display: block;
@@ -315,7 +323,13 @@ APP_CSS = """
     }
     .bitmap-index { color: var(--fg-muted); white-space: nowrap; }
     .bitmap-row { color: var(--fg-subtle); white-space: pre; }
-    .bitmap-row b { color: var(--destructive); font-weight: 700; }
+    .bitmap-row b {
+      color: var(--fg-on-primary);
+      background: var(--destructive);
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      padding-inline: 1px;
+    }
     .bitmap-caption {
       margin-top: var(--space-2);
       color: var(--fg-subtle);
@@ -871,7 +885,7 @@ _CONSOLE_SCRIPT = """<script>
       }
 
       bitmap.innerHTML = html;
-      minimap.innerHTML = `<div class="bitmap-minimap-viewport" aria-hidden="true"></div>` +
+      minimap.innerHTML = `<div class="bitmap-minimap-viewport" role="slider" tabindex="0" aria-label="Spectrum scroll position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>` +
         (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
       const totalRows = Math.ceil(full.length / width);
       minimap.querySelectorAll("button[data-row]").forEach((marker) => {
@@ -884,12 +898,43 @@ _CONSOLE_SCRIPT = """<script>
           bitmapScroll.scrollTo({ top: target, behavior: "auto" });
         };
       });
+
       const viewport = minimap.querySelector(".bitmap-minimap-viewport");
       const syncViewport = () => {
         const contentHeight = Math.max(1, bitmapScroll.scrollHeight);
+        const progress = bitmapScroll.scrollTop / Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
         viewport.style.top = `${bitmapScroll.scrollTop / contentHeight * 100}%`;
         viewport.style.height = `${bitmapScroll.clientHeight / contentHeight * 100}%`;
+        viewport.setAttribute("aria-valuenow", String(Math.round(progress * 100)));
       };
+      let dragStartY = null;
+      let dragStartScroll = 0;
+      viewport.addEventListener("pointerdown", (event) => {
+        dragStartY = event.clientY;
+        dragStartScroll = bitmapScroll.scrollTop;
+        viewport.classList.add("dragging");
+        viewport.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      viewport.addEventListener("pointermove", (event) => {
+        if (dragStartY === null) return;
+        const track = Math.max(1, minimap.clientHeight - viewport.offsetHeight);
+        const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        bitmapScroll.scrollTop = dragStartScroll + (event.clientY - dragStartY) / track * maxScroll;
+      });
+      const stopDrag = (event) => {
+        if (dragStartY === null) return;
+        dragStartY = null;
+        viewport.classList.remove("dragging");
+        if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      };
+      viewport.addEventListener("pointerup", stopDrag);
+      viewport.addEventListener("pointercancel", stopDrag);
+      viewport.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        bitmapScroll.scrollTop += event.key === "ArrowDown" ? bitmapScroll.clientHeight / 5 : -bitmapScroll.clientHeight / 5;
+        event.preventDefault();
+      });
       bitmapScroll.onscroll = syncViewport;
       syncViewport();
       const last = lst.entries - 1;

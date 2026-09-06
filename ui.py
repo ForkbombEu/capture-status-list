@@ -263,6 +263,25 @@ APP_CSS = """
       outline: 2px solid var(--destructive);
       outline-offset: 1px;
     }
+    .bitmap-minimap-row-jump {
+      width: 100%;
+      height: 100%;
+      min-height: 2px;
+      padding: 0;
+      border: 0;
+      border-radius: 1px;
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
+      font-size: 0;
+      line-height: 1;
+    }
+    .bitmap-minimap-row-jump:hover,
+    .bitmap-minimap-row-jump:focus-visible {
+      background: var(--brand-secondary-strong);
+      outline: 2px solid var(--brand-accent);
+      outline-offset: 1px;
+    }
     .bitmap-minimap-viewport {
       position: absolute;
       inset-inline: 0;
@@ -847,14 +866,14 @@ _CONSOLE_SCRIPT = """<script>
         html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
         const marker = rowRevoked.length
           ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}"></button>`
-          : "";
+          : `<button class="bitmap-minimap-row-jump" type="button" data-row="${rowNumber}" aria-label="Jump to entries starting at ${index}" title="Entries ${index} to ${index + ROW_ENTRIES - 1}"></button>`;
         minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
       }
 
       bitmap.innerHTML = html;
       minimap.innerHTML = `<div class="bitmap-minimap-viewport" aria-hidden="true"></div>` +
         (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
-      minimap.querySelectorAll(".bitmap-minimap-marker").forEach((marker) => {
+      minimap.querySelectorAll("button[data-row]").forEach((marker) => {
         marker.onclick = () => {
           const row = bitmap.querySelector(`.bitmap-row[data-row="${marker.dataset.row}"]`);
           if (row) bitmapScroll.scrollTop = row.offsetTop - bitmapScroll.clientHeight / 2;

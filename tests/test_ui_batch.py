@@ -31,6 +31,8 @@ def test_console_is_served_at_the_root() -> None:
     assert 'id="lst-bitmap-scroll"' in response.text
     assert 'id="lst-minimap"' in response.text
     assert 'bitmap-minimap-marker' in response.text
+    assert 'bitmap-minimap-row-jump' in response.text
+    assert 'button[data-row]' in response.text
     assert 'document.querySelector("#token").onclick' in response.text
 
 

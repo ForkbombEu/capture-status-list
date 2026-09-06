@@ -120,7 +120,10 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
     client.post("/credentials", json={"credential_id": "cred-001", "idx": 5})
     client.post("/credentials", json={"credential_id": "cred-002", "idx": 6})
     client.post("/credentials/cred-001/revoke")
-    decoded = client.get("/debug/status-list").json()
+    response = client.get("/debug/status-list")
+    decoded = response.json()
+
+    assert response.headers["cache-control"] == "no-store"
 
     assert decoded["warning"] == "TEST/DEBUG ONLY"
     assert decoded["token"].count(".") == 2

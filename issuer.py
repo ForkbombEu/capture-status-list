@@ -49,7 +49,8 @@ class CredentialRecord:
     credential_id: str
     idx: int
     status_list_uri: str = STATUS_LIST_URI
-
+    eudi_status_list_uri: str | None = None
+    eudi_idx: int | None = None
     def status_reference(self) -> dict[str, dict[str, int | str]]:
         return {
             "status_list": {
@@ -149,6 +150,7 @@ class InMemoryIssuer:
         self,
         credential_id: str,
         idx: int | None = None,
+        eudi_reference: tuple[str, int] | None = None,
     ) -> CredentialResponse:
         if credential_id in self.credentials:
             raise KeyError(f"credential already exists: {credential_id}")
@@ -156,7 +158,12 @@ class InMemoryIssuer:
         assigned_idx = idx if idx is not None else self._next_unused_idx()
         self._validate_unused_idx(assigned_idx)
 
-        record = CredentialRecord(credential_id=credential_id, idx=assigned_idx)
+        record = CredentialRecord(
+            credential_id=credential_id,
+            idx=assigned_idx,
+            eudi_status_list_uri=eudi_reference[0] if eudi_reference else None,
+            eudi_idx=eudi_reference[1] if eudi_reference else None,
+        )
         self.credentials[credential_id] = record
         return CredentialResponse(
             credential_id=record.credential_id,
@@ -168,6 +175,8 @@ class InMemoryIssuer:
     def revoke_credential(self, credential_id: str) -> RevokeResponse:
         record = self.get_credential(credential_id)
         self.statuses[record.idx] = STATUS_INVALID
+        if record.eudi_status_list_uri is not None and record.eudi_idx is not None:
+            eudi_registry.set_status(record.eudi_status_list_uri, record.eudi_idx)
         self.version += 1
         return RevokeResponse(
             credential_id=record.credential_id,
@@ -228,8 +237,11 @@ issuer_state = InMemoryIssuer()
 def create_credential_record(
     credential_id: str,
     idx: int | None = None,
+    eudi_reference: tuple[str, int] | None = None,
 ) -> CredentialResponse:
-    return issuer_state.create_credential(credential_id, idx=idx)
+    return issuer_state.create_credential(
+        credential_id, idx=idx, eudi_reference=eudi_reference
+    )
 
 
 def revoke_credential_record(credential_id: str) -> RevokeResponse:
@@ -266,6 +278,7 @@ def public_key_pem() -> str:
 
 def reset_state() -> None:
     issuer_state.reset()
+    eudi_registry.reset()
 
 
 def take_eudi_reference(country: str, doctype: str, expiry_date: str):

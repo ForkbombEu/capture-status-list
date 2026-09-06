@@ -106,3 +106,25 @@ def test_new_country_doctype_gets_a_distinct_uuid_list() -> None:
     summaries = client.get("/debug/status-lists").json()
     assert len(summaries) == 2
     assert {summary["country"] for summary in summaries} == {"EU", "DE"}
+
+def test_debugger_batch_populates_and_revokes_pooled_list() -> None:
+    response = client.post(
+        "/credentials/random-batch",
+        json={
+            "count": 3,
+            "prefix": "pool",
+            "country": "DE",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2099-12-31",
+        },
+    )
+    created = response.json()["created"]
+    summary = client.get("/debug/status-lists").json()[0]
+    assert response.status_code == 200
+    assert summary["country"] == "DE"
+    assert summary["allocated"] == 3
+    assert summary["revoked"] == 0
+
+    client.post("/credentials/revoke-batch", json={"credential_ids": [item["credential_id"] for item in created]})
+
+    assert client.get("/debug/status-lists").json()[0]["revoked"] == 3

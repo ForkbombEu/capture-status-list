@@ -25,6 +25,9 @@ def test_console_is_served_at_the_root() -> None:
     assert "/debug/status-lists" in response.text
     assert "/token_status_list/take" in response.text
     assert "identifier-list" in response.text
+    assert 'id="country"' in response.text
+    assert 'id="doctype"' in response.text
+    assert 'id="expiry-date"' in response.text
 
 
 def test_red_route_is_gone() -> None:

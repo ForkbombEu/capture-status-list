@@ -14,6 +14,9 @@ class RandomBatchCreateRequest(BaseModel):
         max_length=32,
         pattern=r"^[A-Za-z0-9_-]+$",
     )
+    country: str = Field(default="EU", min_length=1, max_length=16)
+    doctype: str = Field(default="org.iso.18013.5.1.mDL", min_length=1, max_length=128)
+    expiry_date: str = Field(default="2099-12-31", pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CredentialResponse(BaseModel):

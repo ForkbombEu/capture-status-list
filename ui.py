@@ -406,6 +406,12 @@ _CONSOLE_BODY = """  <header class="hero">
           <input id="count" type="number" min="1" max="500" value="10">
           <label class="field-label" for="prefix">Credential prefix</label>
           <input id="prefix" type="text" value="cred">
+          <label class="field-label" for="country">Country</label>
+          <input id="country" type="text" value="EU" maxlength="16">
+          <label class="field-label" for="doctype">Doctype</label>
+          <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+          <label class="field-label" for="expiry-date">List expiry</label>
+          <input id="expiry-date" type="date" value="2099-12-31">
           <div class="btn-stack">
             <button id="create" class="btn btn-md btn-primary">Create random batch</button>
           </div>
@@ -595,6 +601,7 @@ _CONSOLE_SCRIPT = """<script>
 
     async function jsonFetch(url, options = {}) {
       const response = await fetch(url, {
+        cache: "no-store",
         headers: { "content-type": "application/json", ...(options.headers || {}) },
         ...options,
       });
@@ -667,6 +674,9 @@ _CONSOLE_SCRIPT = """<script>
       const body = {
         count: Number(document.querySelector("#count").value || 10),
         prefix: document.querySelector("#prefix").value || "cred",
+        country: document.querySelector("#country").value || "EU",
+        doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
+        expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
       };
       const data = await jsonFetch("/credentials/random-batch", {
         method: "POST",

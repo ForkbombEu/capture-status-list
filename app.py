@@ -148,10 +148,20 @@ def create_random_batch(request: RandomBatchCreateRequest) -> RandomBatchCreateR
         for _attempt in range(10):
             credential_id = f"{request.prefix}-{uuid4().hex[:12]}"
             try:
-                created.append(create_credential_record(credential_id))
+                reference = take_eudi_reference(
+                    request.country, request.doctype, request.expiry_date
+                )
+                created.append(
+                    create_credential_record(
+                        credential_id,
+                        eudi_reference=(reference.status_list_uri, reference.idx),
+                    )
+                )
                 break
             except KeyError:
                 continue
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         else:
             raise HTTPException(
                 status_code=409,
@@ -383,7 +393,7 @@ def debug_status(idx: int) -> DebugStatusResponse:
 
 
 @app.get("/debug/status-list", response_model=StatusListDebugResponse)
-def debug_status_list() -> StatusListDebugResponse:
+def debug_status_list(response: Response) -> StatusListDebugResponse:
     """Decode the current Status List Token into its human-readable parts.
 
     Test infrastructure: it exposes the token header, payload, the inflated
@@ -411,6 +421,7 @@ def debug_status_list() -> StatusListDebugResponse:
         for record in list_credential_records()
     ]
 
+    response.headers["Cache-Control"] = "no-store"
     return StatusListDebugResponse(
         token=token,
         header=header,

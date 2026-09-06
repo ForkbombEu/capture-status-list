@@ -927,6 +927,13 @@ _CONSOLE_SCRIPT = """<script>
       renderDecodedToken(await jsonFetch("/debug/status-list"));
     }
 
+    document.querySelector("#token").onclick = async () => {
+      const data = await jsonFetch("/debug/status-list");
+      renderDecodedToken(data);
+      write("Status list token fetched. The decoded token, status list and signing key are shown above the output.");
+      tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
     document.querySelector("#reset").onclick = async () => {
       const data = await jsonFetch("/reset", { method: "POST" });
       verification = {};

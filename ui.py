@@ -213,11 +213,15 @@ APP_CSS = """
     }
     .bitmap-scroll,
     .bitmap-minimap-scroll {
-      max-height: 420px;
+      height: 420px;
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--bg-muted);
+    }
+    .bitmap-minimap-scroll {
+      overflow: hidden;
+      position: relative;
     }
     .bitmap-scroll:focus-visible,
     .bitmap-minimap-scroll:focus-visible {
@@ -225,32 +229,45 @@ APP_CSS = """
       outline-offset: 2px;
     }
     .bitmap-minimap {
-      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
       padding: var(--space-2);
       font-family: var(--font-mono);
+      position: relative;
     }
     .bitmap-minimap-line {
       display: flex;
+      flex: 1 1 0;
       align-items: center;
-      height: 24px;
+      min-height: 1px;
     }
     .bitmap-minimap-marker {
       width: 100%;
-      height: 16px;
+      height: 100%;
+      min-height: 2px;
       padding: 0;
       border: 0;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--destructive);
+      border-radius: 1px;
+      background: var(--destructive);
+      color: transparent;
       cursor: pointer;
-      font-weight: 800;
+      font-size: 0;
       line-height: 1;
     }
     .bitmap-minimap-marker:hover,
     .bitmap-minimap-marker:focus-visible {
-      background: var(--destructive-bg);
+      background: var(--destructive);
       outline: 2px solid var(--destructive);
       outline-offset: 1px;
+    }
+    .bitmap-minimap-viewport {
+      position: absolute;
+      inset-inline: 0;
+      border: 2px solid var(--brand-accent);
+      pointer-events: none;
+      z-index: 1;
     }
     .bitmap-minimap-empty {
       display: block;
@@ -803,7 +820,6 @@ _CONSOLE_SCRIPT = """<script>
     function renderBitmap(lst, revokedIndices) {
       const bitmapScroll = document.querySelector("#lst-bitmap-scroll");
       const bitmap = document.querySelector("#lst-bitmap");
-      const minimapScroll = document.querySelector("#lst-minimap-scroll");
       const minimap = document.querySelector("#lst-minimap");
       const full = lst.full || lst.window;
       const width = ROW_ENTRIES * lst.chars_per_entry;
@@ -822,33 +838,31 @@ _CONSOLE_SCRIPT = """<script>
           .join("");
         html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
         const marker = rowRevoked.length
-          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}">●</button>`
+          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}"></button>`
           : "";
         minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
       }
 
       bitmap.innerHTML = html;
-      minimap.innerHTML = minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`;
+      minimap.innerHTML = `<div class="bitmap-minimap-viewport" aria-hidden="true"></div>` +
+        (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
       minimap.querySelectorAll(".bitmap-minimap-marker").forEach((marker) => {
         marker.onclick = () => {
           const row = bitmap.querySelector(`.bitmap-row[data-row="${marker.dataset.row}"]`);
           if (row) bitmapScroll.scrollTop = row.offsetTop - bitmapScroll.clientHeight / 2;
         };
       });
-      const syncMinimap = () => {
-        const bitmapMax = Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
-        const minimapMax = Math.max(1, minimapScroll.scrollHeight - minimapScroll.clientHeight);
-        minimapScroll.scrollTop = bitmapScroll.scrollTop / bitmapMax * minimapMax;
+      const viewport = minimap.querySelector(".bitmap-minimap-viewport");
+      const syncViewport = () => {
+        const contentHeight = Math.max(1, bitmapScroll.scrollHeight);
+        viewport.style.top = `${bitmapScroll.scrollTop / contentHeight * 100}%`;
+        viewport.style.height = `${bitmapScroll.clientHeight / contentHeight * 100}%`;
       };
-      bitmapScroll.onscroll = syncMinimap;
-      minimapScroll.onscroll = () => {
-        const bitmapMax = Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
-        const minimapMax = Math.max(1, minimapScroll.scrollHeight - minimapScroll.clientHeight);
-        bitmapScroll.scrollTop = minimapScroll.scrollTop / minimapMax * bitmapMax;
-      };
+      bitmapScroll.onscroll = syncViewport;
+      syncViewport();
       const last = lst.entries - 1;
       document.querySelector("#lst-caption").textContent =
-        `Entries 0 to ${last} of ${lst.entries}. Red markers are revoked entries; click a minimap marker to jump there.`;
+        `Entries 0 to ${last} of ${lst.entries}. Red bars mark revoked rows; click a bar to jump there.`;
     }
 
     function renderDecodedToken(data) {

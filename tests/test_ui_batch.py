@@ -40,6 +40,32 @@ def test_console_is_served_at_the_root() -> None:
     assert "Token formats" in response.text
 
 
+
+def test_console_renders_results_panel_before_the_token() -> None:
+    html = client.get("/").text
+
+    assert 'class="container console-container page-content"' in html
+    assert 'class="console-grid"' in html
+    assert 'class="stack console-left"' in html
+    assert 'class="stack console-right"' in html
+    assert html.index('id="rows"') < html.index('id="out"')
+    assert html.index('id="out"') < html.index('id="token-card"')
+
+
+def test_verify_and_revoke_reload_the_status_list_token() -> None:
+    script = client.get("/").text
+
+    for handler, endpoint in (
+        ('document.querySelector("#verify").onclick', "/verify-batch"),
+        ('document.querySelector("#revoke").onclick', "/credentials/revoke-batch"),
+    ):
+        start = script.index(handler)
+        body = script[start : start + 1500]
+        assert endpoint in body, handler
+        assert "await refreshToken(true)" in body, handler
+
+
+
 def test_red_route_is_gone() -> None:
     assert client.get("/red").status_code == 404
 

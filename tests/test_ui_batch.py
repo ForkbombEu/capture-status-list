@@ -34,6 +34,10 @@ def test_console_is_served_at_the_root() -> None:
     assert 'bitmap-minimap-row-jump' in response.text
     assert 'button[data-row]' in response.text
     assert 'document.querySelector("#token").onclick' in response.text
+    assert 'data-preview' in response.text
+    assert "application/statuslist+cwt" in response.text
+    assert "application/identifierlist+cwt" in response.text
+    assert "Token formats" in response.text
 
 
 def test_red_route_is_gone() -> None:

@@ -573,7 +573,7 @@ _CONSOLE_BODY = """  <header class="hero">
         <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>.</p>
         <div class="test-table-wrap">
           <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th><th>Token formats</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
@@ -776,18 +776,51 @@ _CONSOLE_SCRIPT = """<script>
       };
     }
 
+    let formatPreview = null;
+
     function renderRegistry(lists) {
       registryCount.textContent = lists.length;
+      const sameOrigin = (uri) => uri.replace(/^https?:\\/\\/[^/]+/, window.location.origin);
       registryRows.innerHTML = lists.length
-        ? lists.map((item) => `<tr>
+        ? lists.map((item) => {
+            const tokenUri = sameOrigin(item.status_list_uri);
+            const identifierUri = sameOrigin(item.identifier_list_uri);
+            return `<tr>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
             <td>${item.allocated}</td><td>${item.revoked}</td>
             <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="7">No country × doctype lists allocated yet.</td></tr>`;
+            <td>
+              <div class="btn-row">
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+jwt">ARL · JWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+cwt">ARL · CWT</button>
+              </div>
+            </td>
+          </tr>`;
+          }).join("")
+        : `<tr class="empty-row"><td colspan="8">No country × doctype lists allocated yet.</td></tr>`;
+      registryRows.querySelectorAll("button[data-preview]").forEach((button) => {
+        button.onclick = async () => {
+          const response = await fetch(button.dataset.preview, {
+            cache: "no-store",
+            headers: { Accept: button.dataset.media },
+          });
+          if (!response.ok) {
+            write(`Token fetch failed: ${response.status}`);
+            return;
+          }
+          const type = response.headers.get("content-type") || "";
+          const body = type.includes("cwt")
+            ? [...new Uint8Array(await response.arrayBuffer())]
+            : await response.text();
+          formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
+          write(formatPreview);
+        };
+      });
     }
 
     async function load() {

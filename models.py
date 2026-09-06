@@ -31,7 +31,7 @@ class CredentialListItem(BaseModel):
     idx: int
     status_list_uri: str
     status: str
-
+    verification_result: str | None = None
 
 class CredentialListResponse(BaseModel):
     credentials: list[CredentialListItem]

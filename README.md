@@ -70,6 +70,10 @@ Seed demo UI data after the server is running:
 mise run seed
 ```
 
+The default seed creates a mixed debugger fixture: multiple countries and
+doctypes, active and expired pools, revoked and non-revoked credentials, and a
+mix of verified and not-yet-verified rows. Use `mise run seed -- --simple` for
+the original single-pool fixture.
 The app reads operator-supplied country signing material without generating or
 copying secrets. Set `EUDI_KEY_DIR` to the mounted key directory. It accepts
 `<country>.key.pem` / `<country>.cert.der`, the European reference filenames

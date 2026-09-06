@@ -534,7 +534,7 @@ _CONSOLE_BODY = """  <header class="hero">
         <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>.</p>
         <div class="test-table-wrap">
           <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Version</th></tr></thead>
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
@@ -735,9 +735,11 @@ _CONSOLE_SCRIPT = """<script>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
-            <td>${item.allocated}</td><td>${item.revoked}</td><td>${item.version}</td>
+            <td>${item.allocated}</td><td>${item.revoked}</td>
+            <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
+            <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
           </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="6">No country × doctype lists allocated yet.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="7">No country × doctype lists allocated yet.</td></tr>`;
     }
 
     async function load() {
@@ -746,6 +748,11 @@ _CONSOLE_SCRIPT = """<script>
         jsonFetch("/debug/status-lists"),
       ]);
       credentials = data.credentials;
+      verification = Object.fromEntries(
+        credentials
+          .filter((item) => item.verification_result)
+          .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
+      );
       renderRegistry(lists);
       render();
     }

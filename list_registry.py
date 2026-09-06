@@ -59,6 +59,7 @@ class ListSummary:
     revoked: int
     version: int
     expires: str | None
+    expired: bool
     current: bool
 
 
@@ -101,6 +102,15 @@ class StatusListRegistry:
             raise KeyError(f"unknown {kind} list: {uri}")
         return kind, state
 
+    def expire(self, uri: str, expiry_date: str) -> ListState:
+        _, state = self.get_by_uri(uri)
+        try:
+            state.issued_expiry = date.fromisoformat(expiry_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("expiry_date must use YYYY-MM-DD") from exc
+        state.version += 1
+        return state
+
     def set_status(self, uri: str, idx: int, value: int = 1) -> ListState:
         kind, state = self.get_by_uri(uri)
         if value != 1:
@@ -124,6 +134,7 @@ class StatusListRegistry:
         result: list[ListSummary] = []
         for key, state in sorted(self._lists.items(), key=lambda item: str(item[0])):
             current = self._current.get(key[:2]) is state
+            expired = state.issued_expiry is not None and state.issued_expiry < date.today()
             result.append(
                 ListSummary(
                     country=state.country,
@@ -135,6 +146,7 @@ class StatusListRegistry:
                     revoked=sum(value == 1 for value in state.statuses),
                     version=state.version,
                     expires=state.issued_expiry.isoformat() if state.issued_expiry else None,
+                    expired=expired,
                     current=current,
                 )
             )

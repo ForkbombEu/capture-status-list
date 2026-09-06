@@ -140,6 +140,7 @@ class InMemoryIssuer:
     def reset(self) -> None:
         self.statuses = [STATUS_VALID] * DEFAULT_STATUS_LIST_SIZE
         self.credentials: dict[str, CredentialRecord] = {}
+        self.verification_results: dict[str, str] = {}
         self._cursor = INDEX_CURSOR_START
         self._scatter = IndexScatter(
             DEFAULT_STATUS_LIST_SIZE, seed=secrets.token_bytes(32)
@@ -195,6 +196,12 @@ class InMemoryIssuer:
             raise InvalidStatusListIndex(idx, len(self.statuses))
         return status_label(self.statuses[idx])
 
+    def mark_verification(self, credential_id: str, result: str) -> None:
+        self.verification_results[credential_id] = result
+
+    def verification_result(self, credential_id: str) -> str | None:
+        return self.verification_results.get(credential_id)
+
     def status_list_token(self, private_key_pem: str) -> str:
         return generate_status_list_token(
             self.statuses,
@@ -246,6 +253,14 @@ def create_credential_record(
 
 def revoke_credential_record(credential_id: str) -> RevokeResponse:
     return issuer_state.revoke_credential(credential_id)
+
+
+def mark_credential_verification(credential_id: str, result: str) -> None:
+    issuer_state.mark_verification(credential_id, result)
+
+
+def credential_verification_result(credential_id: str) -> str | None:
+    return issuer_state.verification_result(credential_id)
 
 
 def get_credential_record(credential_id: str) -> CredentialRecord:

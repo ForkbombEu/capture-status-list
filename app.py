@@ -16,6 +16,7 @@ from issuer import (
     STATUS_LIST_URI,
     build_eudi_token,
     create_credential_record,
+    credential_verification_result,
     debug_status_at,
     eudi_list_summaries,
     eudi_registry,
@@ -23,6 +24,7 @@ from issuer import (
     generate_current_status_list_token,
     get_credential_record,
     list_credential_records,
+    mark_credential_verification,
     list_version,
     public_jwks,
     reset_eudi_registry,
@@ -93,12 +95,14 @@ def _verify_record(credential_id: str, token: str | None = None) -> VerifyRespon
     except (InvalidStatusListIndex, VerificationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return VerifyResponse(
+    result = VerifyResponse(
         credential_id=credential.credential_id,
         idx=credential.idx,
         result="ACCEPT" if status == "VALID" else "REJECT",
         status=status,
     )
+    mark_credential_verification(credential.credential_id, result.result)
+    return result
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -125,6 +129,7 @@ def list_credentials() -> CredentialListResponse:
                 idx=record.idx,
                 status_list_uri=record.status_list_uri,
                 status=debug_status_at(record.idx),
+                verification_result=credential_verification_result(record.credential_id),
             )
             for record in list_credential_records()
         ]
@@ -326,6 +331,18 @@ async def set_identifier_status(request: Request) -> PlainTextResponse:
 @app.get("/debug/status-lists")
 def debug_status_lists() -> list[dict]:
     return [asdict(summary) for summary in eudi_list_summaries()]
+
+
+@app.post("/debug/status-lists/expire")
+async def debug_expire_status_list(request: Request) -> dict[str, str]:
+    body = await request.json()
+    try:
+        uri = str(body["uri"])
+        expiry_date = str(body["expiry_date"])
+        eudi_registry.expire(uri, expiry_date)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "EXPIRED", "uri": uri, "expiry_date": expiry_date}
 
 
 def _status_list_etag() -> str:

@@ -106,6 +106,23 @@ restarts. Run without the volume for ephemeral local testing:
 docker run --rm -p 8000:8000 capture-status-list
 ```
 
+`mise` is a host development tool and is intentionally not installed in the
+minimal Python runtime image. When seeding from the host while the container
+is running, use:
+
+```sh
+mise run seed -- --base-url http://localhost:8000
+```
+
+When running the command inside the container shell, use Python directly:
+
+```sh
+python /app/seed.py --base-url http://127.0.0.1:8000
+```
+
+The command seeds the rich multi-country fixture. Add `--simple` for the
+legacy single-pool fixture.
+
 ## Design
 
 The user interface follows the Credimi Extras brand. `.puria/design/DESIGN.md`

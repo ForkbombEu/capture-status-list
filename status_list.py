@@ -180,21 +180,57 @@ def generate_status_list_token(
     kid: str,
     bits: int = DEFAULT_BITS,
     ttl: int = TOKEN_TTL_SECONDS,
+    aggregation_uri: str | None = None,
+    certificate_der: bytes | None = None,
+    include_exp: bool = True,
 ) -> str:
     now = int(time.time())
-    payload = {
+    payload: dict[str, object] = {
         "iss": issuer,
         "sub": subject,
         "iat": now,
-        "exp": now + ttl,
-        "ttl": ttl,
-        "status_list": generate_status_list(values, bits=bits),
+        "status_list": generate_status_list(
+            values, bits=bits, aggregation_uri=aggregation_uri
+        ),
     }
-    headers = {
+    if include_exp:
+        payload["exp"] = now + ttl
+        payload["ttl"] = ttl
+    headers: dict[str, object] = {
         "alg": "ES256",
         "kid": kid,
         "typ": "statuslist+jwt",
     }
+    if certificate_der:
+        headers["x5c"] = [base64.b64encode(certificate_der).decode("ascii")]
+    return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
+def generate_identifier_list_token(
+    identifiers: dict[str, int],
+    *,
+    private_key_pem: str,
+    issuer: str,
+    subject: str,
+    kid: str,
+    ttl: int = TOKEN_TTL_SECONDS,
+    certificate_der: bytes | None = None,
+    include_exp: bool = False,
+) -> str:
+    now = int(time.time())
+    payload: dict[str, object] = {
+        "iss": issuer,
+        "sub": subject,
+        "iat": now,
+        "identifier_list": identifiers,
+    }
+    if include_exp:
+        payload["exp"] = now + ttl
+    headers: dict[str, object] = {
+        "alg": "ES256",
+        "kid": kid,
+        "typ": "application/identifierlist+jwt",
+    }
+    if certificate_der:
+        headers["x5c"] = [base64.b64encode(certificate_der).decode("ascii")]
     return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
 
 

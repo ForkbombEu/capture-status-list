@@ -310,7 +310,7 @@ _EXTRAS_BOTTOM = f"""    <div class="extras-bottom">
 
 
 def _topbar(active: str) -> str:
-    links = (("Console", "/"), ("API docs", "/docs"), ("Status list token", "/status/1"))
+    links = (("Console", "/"), ("API docs", "/docs"), ("Status list API", "/token_status_list/take"))
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
             href=href,
@@ -339,8 +339,8 @@ _FOOTER = f"""  <footer class="footer">
         </div>
         <div class="footer-links">
           <div class="footer-col">
-            <h5>Endpoints</h5>
-            <a href="/status/1">Status list token</a>
+            <a href="/token_status_list/take">Status list API</a>
+            <a href="/status/1">Legacy status list token</a>
             <a href="/.well-known/jwks.json">JWKS</a>
             <a href="/docs">API docs</a>
           </div>
@@ -392,8 +392,9 @@ _CONSOLE_BODY = """  <header class="hero">
     <div class="hero-inner">
       <p class="eyebrow">EUDI conformance utility</p>
       <h1>Token status list console</h1>
-      <p>Create test credentials, revoke selected entries, and verify them against the
-        signed Status List Token served at <span class="mono">/status/1</span>.</p>
+        <p>Create test credentials, revoke selected entries, and verify them against the
+        signed Status List Token. The registry debugger below exposes paired country × doctype
+        Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
     </div>
   </header>
   <main class="container page-content">
@@ -443,6 +444,20 @@ _CONSOLE_BODY = """  <header class="hero">
         <div class="card">
           <strong class="metric-value" id="verified">0</strong>
           <span class="eyebrow">Verified rows</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-header">
+          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
+          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
+        </div>
+        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>.</p>
+        <div class="test-table-wrap">
+          <table class="test-table">
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Version</th></tr></thead>
+            <tbody id="registry-rows"></tbody>
+          </table>
         </div>
       </section>
 
@@ -548,6 +563,8 @@ _CONSOLE_BODY = """  <header class="hero">
 
 _CONSOLE_SCRIPT = """<script>
     const rows = document.querySelector("#rows");
+    const registryRows = document.querySelector("#registry-rows");
+    const registryCount = document.querySelector("#registry-count");
     const out = document.querySelector("#out");
     const total = document.querySelector("#total");
     const valid = document.querySelector("#valid");
@@ -624,9 +641,25 @@ _CONSOLE_SCRIPT = """<script>
       }).join("");
     }
 
+    function renderRegistry(lists) {
+      registryCount.textContent = lists.length;
+      registryRows.innerHTML = lists.length
+        ? lists.map((item) => `<tr>
+            <td class="cell-mono">${escapeHtml(item.country)}</td>
+            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            <td class="cell-mono">${escapeHtml(item.list_id)}</td>
+            <td>${item.allocated}</td><td>${item.revoked}</td><td>${item.version}</td>
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="6">No country × doctype lists allocated yet.</td></tr>`;
+    }
+
     async function load() {
-      const data = await jsonFetch("/credentials");
+      const [data, lists] = await Promise.all([
+        jsonFetch("/credentials"),
+        jsonFetch("/debug/status-lists"),
+      ]);
       credentials = data.credentials;
+      renderRegistry(lists);
       render();
     }
 
@@ -668,6 +701,7 @@ _CONSOLE_SCRIPT = """<script>
     };
 
     document.querySelector("#refresh").onclick = load;
+    document.querySelector("#registry-refresh").onclick = load;
     document.querySelector("#all").onclick = () => {
       document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
     };

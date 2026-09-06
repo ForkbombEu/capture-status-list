@@ -3,10 +3,14 @@
 Minimal local Token Status List (TSL) server for EUDI Wallet Functional
 Conformance Assessment experiments.
 
-The standards-critical endpoint is `GET /status/1`. It returns a signed JWT
-Status List Token with a `status_list` claim containing `bits` and `lst`, where
-`lst` is the zlib-compressed status byte array encoded as base64url without
-padding.
+The standards-critical legacy endpoint is `GET /status/1`. The EU-compatible
+registry API is `POST /token_status_list/take`: it allocates paired lists for
+each country × doctype and returns UUID-based `token_status_list` and
+`identifier_list` URIs. Both resources negotiate JWT and CBOR/COSE CWT.
+
+Status-list bytes use the `status_list` claim containing `bits` and `lst`,
+where `lst` is the zlib-compressed status byte array encoded as base64url
+without padding in JWT form (raw compressed bytes in CWT form).
 
 The issuer, credential registry, debug endpoint, reset endpoint, and verifier
 endpoint are simplified test infrastructure. They are not EUDI issuance,
@@ -66,7 +70,15 @@ Seed demo UI data after the server is running:
 mise run seed
 ```
 
-The app generates a local ES256 test signing key on first use:
+The app reads operator-supplied country signing material without generating or
+copying secrets. Set `EUDI_KEY_DIR` to the mounted key directory. It accepts
+`<country>.key.pem` / `<country>.cert.der`, the European reference filenames
+(`PID-DS-0001_<country>.pem` and matching `_cert.der`, plus the AV filenames),
+or the local fallback `private.pem` / `certificate.der`. The certificate is
+optional for local debugging; when present it is emitted in JWT `x5c` and CWT
+COSE header label 33.
+
+The legacy local signer still generates a test key on first use:
 
 ```text
 keys/private.pem
@@ -167,18 +179,45 @@ REVOKED
 ## Status-List Flow
 
 ```text
-Credential
+POST /token_status_list/take
 |
-| idx = 42
+| country × doctype + expiry_date
 v
-Status List Token
+Paired UUID list references
 |
-| decode index 42
+| Accept: JWT or CWT/CBOR
 v
-status = REVOKED
+Status value: VALID or REVOKED
 ```
 
 ## API
+
+EU-compatible paired-list API:
+
+```sh
+curl -X POST http://localhost:8000/token_status_list/take \
+  -H 'X-Api-Key: test' \
+  --data-urlencode country=EU \
+  --data-urlencode doctype=org.iso.18013.5.1.mDL \
+  --data-urlencode expiry_date=2099-12-31
+```
+
+The response contains one `status_list` reference and one paired
+`identifier_list` reference. Fetch either URI with `Accept:
+application/statuslist+jwt` or `application/statuslist+cwt` (and the matching
+`identifierlist` media types). Revoke through the reference-compatible API:
+
+```sh
+curl -X POST http://localhost:8000/token_status_list/set \
+  -H 'X-Api-Key: test' \
+  --data-urlencode uri='<status-list-uri>' \
+  --data-urlencode idx=123 \
+  --data-urlencode status=1
+```
+
+`GET /token_status_list/get` and `GET /identifier_list/get` expose raw indexed
+values for debugging. `GET /debug/status-lists` lists all allocated pools for
+the console.
 
 Create a test credential:
 

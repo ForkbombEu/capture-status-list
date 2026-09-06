@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from cwt_codec import (
+    IDENTIFIER_LIST_CWT_MEDIA_TYPE,
+    STATUS_LIST_CWT_MEDIA_TYPE,
+    encode_cwt,
+)
+from key_material import material_for
+from list_registry import IDENTIFIER_LIST_KIND, TOKEN_LIST_KIND, StatusListRegistry
 from models import CredentialResponse, RevokeResponse
 from status_list import (
     DEFAULT_BITS,
@@ -16,7 +25,9 @@ from status_list import (
     STATUS_VALID,
     IndexScatter,
     InvalidStatusListIndex,
+    generate_identifier_list_token,
     generate_status_list_token,
+    pack_status_values,
     status_label,
 )
 
@@ -28,6 +39,9 @@ INDEX_CURSOR_START = 42
 KEYS_DIR = Path(__file__).resolve().parent / "keys"
 PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
 PUBLIC_KEY_PATH = KEYS_DIR / "public.pem"
+
+
+eudi_registry = StatusListRegistry(ISSUER)
 
 
 @dataclass(frozen=True)
@@ -252,3 +266,77 @@ def public_key_pem() -> str:
 
 def reset_state() -> None:
     issuer_state.reset()
+
+
+def take_eudi_reference(country: str, doctype: str, expiry_date: str):
+    return eudi_registry.take(country, doctype, expiry_date)
+
+
+def eudi_status_at(uri: str, idx: int) -> int:
+    return eudi_registry.status_at(uri, idx)
+
+
+def set_eudi_status(uri: str, idx: int, value: int = 1):
+    return eudi_registry.set_status(uri, idx, value)
+
+
+def eudi_list_summaries():
+    return eudi_registry.list_summaries()
+
+
+def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
+    kind, state = eudi_registry.get_by_uri(uri)
+    material = material_for(state.country)
+    certificate = material.certificate_der
+    now = int(time.time())
+    if kind == TOKEN_LIST_KIND:
+        if format_name == "jwt":
+            token = generate_status_list_token(
+                state.statuses,
+                private_key_pem=material.private_pem,
+                issuer=ISSUER,
+                subject=uri,
+                kid=material.kid,
+                certificate_der=certificate,
+                include_exp=False,
+            )
+        else:
+            compressed = zlib.compress(pack_status_values(state.statuses), level=9)
+            payload = {
+                2: uri,
+                6: now,
+                65534: 3600,
+                65533: {"bits": DEFAULT_BITS, "lst": compressed},
+            }
+            token = encode_cwt(
+                payload,
+                material.private_pem,
+                STATUS_LIST_CWT_MEDIA_TYPE,
+                certificate,
+            )
+            return token, STATUS_LIST_CWT_MEDIA_TYPE, state.version
+        return token, "application/statuslist+jwt", state.version
+
+    if format_name == "jwt":
+        token = generate_identifier_list_token(
+            state.identifiers,
+            private_key_pem=material.private_pem,
+            issuer=ISSUER.rstrip("/"),
+            subject=uri,
+            kid=material.kid,
+            certificate_der=certificate,
+        )
+    else:
+        payload = {1: ISSUER.rstrip("/"), 2: uri, 6: now, 65533: state.identifiers}
+        token = encode_cwt(
+            payload,
+            material.private_pem,
+            IDENTIFIER_LIST_CWT_MEDIA_TYPE,
+            certificate,
+        )
+        return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE, state.version
+    return token, "application/identifierlist+jwt", state.version
+
+
+def reset_eudi_registry() -> None:
+    eudi_registry.reset()

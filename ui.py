@@ -86,6 +86,19 @@ APP_CSS = """
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
+    .batch-card { max-width: none; }
+    .batch-fields {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0 var(--space-3);
+    }
+    .batch-fields .field-label { margin-top: var(--space-3); }
+    @media (max-width: 900px) {
+      .batch-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      .batch-fields { grid-template-columns: 1fr; }
+    }
     .test-table-wrap { max-width: 100%; }
     .field-label {
       display: block;
@@ -105,6 +118,15 @@ APP_CSS = """
       width: 100%;
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
+
+    .credential-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .credential-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
       border-color: var(--brand-primary);
@@ -506,57 +528,32 @@ _CONSOLE_BODY = """  <header class="hero">
   </header>
   <main class="container page-content">
     <div class="stack">
-      <div class="card-grid card-grid-3">
-        <section class="card">
-          <div class="section-header"><h2>Add batch</h2></div>
-          <label class="field-label" for="count">Count</label>
-          <input id="count" type="number" min="1" max="500" value="10">
-          <label class="field-label" for="prefix">Credential prefix</label>
-          <input id="prefix" type="text" value="cred">
-          <label class="field-label" for="country">Country</label>
-          <input id="country" type="text" value="EU" maxlength="16">
-          <label class="field-label" for="doctype">Doctype</label>
-          <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-          <label class="field-label" for="expiry-date">List expiry</label>
-          <input id="expiry-date" type="date" value="2099-12-31">
-          <div class="btn-stack">
-            <button id="create" class="btn btn-md btn-primary">Create random batch</button>
+      <section class="card batch-card">
+        <div class="section-header"><h2>Add batch</h2></div>
+        <div class="batch-fields">
+          <div>
+            <label class="field-label" for="count">Count</label>
+            <input id="count" type="number" min="1" max="500" value="10">
           </div>
-        </section>
-        <section class="card">
-          <div class="section-header"><h2>Selected credentials</h2></div>
-          <p class="text-sm text-muted">Batch actions apply to every checked row in the table below.</p>
-          <div class="btn-stack">
-            <button id="verify" class="btn btn-md btn-secondary">Verify selected</button>
-            <button id="revoke" class="btn btn-md btn-destructive">Revoke selected</button>
+          <div>
+            <label class="field-label" for="prefix">Credential prefix</label>
+            <input id="prefix" type="text" value="cred">
           </div>
-        </section>
-        <section class="card">
-          <div class="section-header"><h2>Server state</h2></div>
-          <p class="text-sm text-muted">Reset clears every in-memory credential and status entry.</p>
-          <div class="btn-stack">
-            <button id="refresh" class="btn btn-md btn-outline">Refresh</button>
-            <button id="reset" class="btn btn-md btn-outline">Reset state</button>
+          <div>
+            <label class="field-label" for="country">Country</label>
+            <input id="country" type="text" value="EU" maxlength="16">
           </div>
-        </section>
-      </div>
-
-      <section class="metric-grid" aria-label="Credential metrics">
-        <div class="card">
-          <strong class="metric-value" id="total">0</strong>
-          <span class="eyebrow">Total credentials</span>
+          <div>
+            <label class="field-label" for="doctype">Doctype</label>
+            <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+          </div>
+          <div>
+            <label class="field-label" for="expiry-date">List expiry</label>
+            <input id="expiry-date" type="date" value="2099-12-31">
+          </div>
         </div>
-        <div class="card">
-          <strong class="metric-value" id="valid">0</strong>
-          <span class="eyebrow">Valid</span>
-        </div>
-        <div class="card">
-          <strong class="metric-value" id="revoked">0</strong>
-          <span class="eyebrow">Revoked</span>
-        </div>
-        <div class="card">
-          <strong class="metric-value" id="verified">0</strong>
-          <span class="eyebrow">Verified rows</span>
+        <div class="btn-row mt-4">
+          <button id="create" class="btn btn-md btn-primary">Create random batch</button>
         </div>
       </section>
 
@@ -577,25 +574,33 @@ _CONSOLE_BODY = """  <header class="hero">
       <section class="card">
         <div class="section-header">
           <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
-          <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+          <div class="btn-row">
+            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
+            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
+            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+          </div>
         </div>
         <div class="btn-row mb-4">
           <button id="all" class="btn btn-sm btn-outline">Select all</button>
           <button id="none" class="btn btn-sm btn-outline">Select none</button>
+          <button id="verify" class="btn btn-sm btn-secondary">Verify selected</button>
+          <button id="revoke" class="btn btn-sm btn-destructive">Revoke selected</button>
         </div>
-        <div class="test-table-wrap">
-          <table class="test-table">
-            <thead>
-              <tr>
-                <th><span class="text-xs">Pick</span></th>
-                <th>Credential</th>
-                <th>Index</th>
-                <th>Status</th>
-                <th>Verification</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
+        <div class="credential-scroll">
+          <div class="test-table-wrap">
+            <table class="test-table">
+              <thead>
+                <tr>
+                  <th><span class="text-xs">Pick</span></th>
+                  <th>Credential</th>
+                  <th>Index</th>
+                  <th>Status</th>
+                  <th>Verification</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -686,10 +691,6 @@ _CONSOLE_SCRIPT = """<script>
     const registryRows = document.querySelector("#registry-rows");
     const registryCount = document.querySelector("#registry-count");
     const out = document.querySelector("#out");
-    const total = document.querySelector("#total");
-    const valid = document.querySelector("#valid");
-    const revoked = document.querySelector("#revoked");
-    const verified = document.querySelector("#verified");
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
@@ -725,26 +726,19 @@ _CONSOLE_SCRIPT = """<script>
       return body;
     }
 
+    let visibleRows = 100;
+
     function render() {
       const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
-      const counts = credentials.reduce((acc, item) => {
-        acc.total += 1;
-        if (item.status === "REVOKED") acc.revoked += 1;
-        if (item.status === "VALID") acc.valid += 1;
-        return acc;
-      }, { total: 0, valid: 0, revoked: 0 });
-      total.textContent = counts.total;
-      valid.textContent = counts.valid;
-      revoked.textContent = counts.revoked;
-      verified.textContent = Object.keys(verification).length;
-      rowCount.textContent = counts.total;
+      rowCount.textContent = credentials.length;
 
       if (!credentials.length) {
         rows.innerHTML = `<tr class="empty-row"><td colspan="5">No credentials yet. Create a random batch to start.</td></tr>`;
         return;
       }
 
-      rows.innerHTML = credentials.map((item, index) => {
+      const shown = credentials.slice(0, visibleRows);
+      rows.innerHTML = shown.map((item, index) => {
         const safeCredentialId = escapeHtml(item.credential_id);
         const checked = selectedIndexes.has(String(index)) ? "checked" : "";
         const key = item.credential_id;
@@ -759,7 +753,16 @@ _CONSOLE_SCRIPT = """<script>
           <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
           <td>${result}</td>
         </tr>`;
-      }).join("");
+      }).join("") + (visibleRows < credentials.length
+        ? `<tr class="show-more-row"><td colspan="5">
+            <button id="show-more" class="btn btn-sm btn-outline" type="button">Show more (${visibleRows} of ${credentials.length})</button>
+          </td></tr>`
+        : "");
+      const showMore = document.querySelector("#show-more");
+      if (showMore) showMore.onclick = () => {
+        visibleRows = Math.min(credentials.length, visibleRows + 200);
+        render();
+      };
     }
 
     function renderRegistry(lists) {
@@ -834,6 +837,8 @@ _CONSOLE_SCRIPT = """<script>
     document.querySelector("#refresh").onclick = load;
     document.querySelector("#registry-refresh").onclick = load;
     document.querySelector("#all").onclick = () => {
+      visibleRows = credentials.length;
+      render();
       document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
     };
     document.querySelector("#none").onclick = () => {

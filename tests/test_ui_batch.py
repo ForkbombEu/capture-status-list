@@ -22,6 +22,22 @@ def test_console_is_served_at_the_root() -> None:
     assert "/credentials/random-batch" in response.text
     assert "/verify-batch" in response.text
     assert "/debug/status-list" in response.text
+    assert "/debug/status-lists" in response.text
+    assert "/token_status_list/take" in response.text
+    assert "identifier-list" in response.text
+    assert 'id="country"' in response.text
+    assert 'id="doctype"' in response.text
+    assert 'id="expiry-date"' in response.text
+    assert 'id="lst-bitmap-scroll"' in response.text
+    assert 'id="lst-minimap"' in response.text
+    assert 'bitmap-minimap-marker' in response.text
+    assert 'bitmap-minimap-row-jump' in response.text
+    assert 'button[data-row]' in response.text
+    assert 'document.querySelector("#token").onclick' in response.text
+    assert 'data-preview' in response.text
+    assert "application/statuslist+cwt" in response.text
+    assert "application/identifierlist+cwt" in response.text
+    assert "Token formats" in response.text
 
 
 def test_red_route_is_gone() -> None:
@@ -37,14 +53,16 @@ def test_random_batch_create_lists_credentials() -> None:
     assert response.status_code == 200
     created = response.json()["created"]
     assert len(created) == 3
-    assert [credential["idx"] for credential in created] == [42, 43, 44]
+    created_idx = sorted(credential["idx"] for credential in created)
+    assert len(set(created_idx)) == 3
+    assert all(0 <= idx < 10_000 for idx in created_idx)
     assert all(
         credential["credential_id"].startswith("demo-") for credential in created
     )
 
     listed = client.get("/credentials").json()["credentials"]
 
-    assert [credential["idx"] for credential in listed] == [42, 43, 44]
+    assert [credential["idx"] for credential in listed] == created_idx
     assert {credential["status"] for credential in listed} == {"VALID"}
 
 

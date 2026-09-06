@@ -1,20 +1,33 @@
 from __future__ import annotations
 
 import os
+import secrets
+import time
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from cwt_codec import (
+    IDENTIFIER_LIST_CWT_MEDIA_TYPE,
+    STATUS_LIST_CWT_MEDIA_TYPE,
+    encode_cwt,
+)
+from key_material import material_for
+from list_registry import IDENTIFIER_LIST_KIND, TOKEN_LIST_KIND, StatusListRegistry
 from models import CredentialResponse, RevokeResponse
 from status_list import (
     DEFAULT_BITS,
     DEFAULT_STATUS_LIST_SIZE,
     STATUS_INVALID,
     STATUS_VALID,
+    IndexScatter,
     InvalidStatusListIndex,
+    generate_identifier_list_token,
     generate_status_list_token,
+    pack_status_values,
     status_label,
 )
 
@@ -22,10 +35,13 @@ from status_list import (
 ISSUER = "http://localhost:8000"
 STATUS_LIST_URI = f"{ISSUER}/status/1"
 KEY_ID = "mock-eudi-status-list-1"
-AUTO_INDEX_START = 42
+INDEX_CURSOR_START = 42
 KEYS_DIR = Path(__file__).resolve().parent / "keys"
 PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
 PUBLIC_KEY_PATH = KEYS_DIR / "public.pem"
+
+
+eudi_registry = StatusListRegistry(ISSUER)
 
 
 @dataclass(frozen=True)
@@ -33,7 +49,8 @@ class CredentialRecord:
     credential_id: str
     idx: int
     status_list_uri: str = STATUS_LIST_URI
-
+    eudi_status_list_uri: str | None = None
+    eudi_idx: int | None = None
     def status_reference(self) -> dict[str, dict[str, int | str]]:
         return {
             "status_list": {
@@ -123,12 +140,18 @@ class InMemoryIssuer:
     def reset(self) -> None:
         self.statuses = [STATUS_VALID] * DEFAULT_STATUS_LIST_SIZE
         self.credentials: dict[str, CredentialRecord] = {}
-        self.next_idx = AUTO_INDEX_START
+        self.verification_results: dict[str, str] = {}
+        self._cursor = INDEX_CURSOR_START
+        self._scatter = IndexScatter(
+            DEFAULT_STATUS_LIST_SIZE, seed=secrets.token_bytes(32)
+        )
+        self.version = 0
 
     def create_credential(
         self,
         credential_id: str,
         idx: int | None = None,
+        eudi_reference: tuple[str, int] | None = None,
     ) -> CredentialResponse:
         if credential_id in self.credentials:
             raise KeyError(f"credential already exists: {credential_id}")
@@ -136,10 +159,13 @@ class InMemoryIssuer:
         assigned_idx = idx if idx is not None else self._next_unused_idx()
         self._validate_unused_idx(assigned_idx)
 
-        record = CredentialRecord(credential_id=credential_id, idx=assigned_idx)
+        record = CredentialRecord(
+            credential_id=credential_id,
+            idx=assigned_idx,
+            eudi_status_list_uri=eudi_reference[0] if eudi_reference else None,
+            eudi_idx=eudi_reference[1] if eudi_reference else None,
+        )
         self.credentials[credential_id] = record
-        if assigned_idx >= self.next_idx:
-            self.next_idx = assigned_idx + 1
         return CredentialResponse(
             credential_id=record.credential_id,
             idx=record.idx,
@@ -150,6 +176,9 @@ class InMemoryIssuer:
     def revoke_credential(self, credential_id: str) -> RevokeResponse:
         record = self.get_credential(credential_id)
         self.statuses[record.idx] = STATUS_INVALID
+        if record.eudi_status_list_uri is not None and record.eudi_idx is not None:
+            eudi_registry.set_status(record.eudi_status_list_uri, record.eudi_idx)
+        self.version += 1
         return RevokeResponse(
             credential_id=record.credential_id,
             idx=record.idx,
@@ -167,6 +196,12 @@ class InMemoryIssuer:
             raise InvalidStatusListIndex(idx, len(self.statuses))
         return status_label(self.statuses[idx])
 
+    def mark_verification(self, credential_id: str, result: str) -> None:
+        self.verification_results[credential_id] = result
+
+    def verification_result(self, credential_id: str) -> str | None:
+        return self.verification_results.get(credential_id)
+
     def status_list_token(self, private_key_pem: str) -> str:
         return generate_status_list_token(
             self.statuses,
@@ -177,12 +212,15 @@ class InMemoryIssuer:
             bits=DEFAULT_BITS,
         )
 
+
     def _next_unused_idx(self) -> int:
         used = {record.idx for record in self.credentials.values()}
-        idx = self.next_idx
-        while idx in used:
-            idx += 1
-        return idx
+        while True:
+            idx = self._scatter.permute(self._cursor)
+            self._cursor += 1
+            if idx not in used:
+                return idx
+
 
     def _validate_unused_idx(self, idx: int) -> None:
         if idx < 0 or idx >= len(self.statuses):
@@ -206,12 +244,23 @@ issuer_state = InMemoryIssuer()
 def create_credential_record(
     credential_id: str,
     idx: int | None = None,
+    eudi_reference: tuple[str, int] | None = None,
 ) -> CredentialResponse:
-    return issuer_state.create_credential(credential_id, idx=idx)
+    return issuer_state.create_credential(
+        credential_id, idx=idx, eudi_reference=eudi_reference
+    )
 
 
 def revoke_credential_record(credential_id: str) -> RevokeResponse:
     return issuer_state.revoke_credential(credential_id)
+
+
+def mark_credential_verification(credential_id: str, result: str) -> None:
+    issuer_state.mark_verification(credential_id, result)
+
+
+def credential_verification_result(credential_id: str) -> str | None:
+    return issuer_state.verification_result(credential_id)
 
 
 def get_credential_record(credential_id: str) -> CredentialRecord:
@@ -230,6 +279,10 @@ def generate_current_status_list_token() -> str:
     return issuer_state.status_list_token(key_store.private_pem())
 
 
+def list_version() -> int:
+    return issuer_state.version
+
+
 def public_jwks() -> dict[str, list[dict[str, str]]]:
     return key_store.jwks()
 
@@ -240,3 +293,78 @@ def public_key_pem() -> str:
 
 def reset_state() -> None:
     issuer_state.reset()
+    eudi_registry.reset()
+
+
+def take_eudi_reference(country: str, doctype: str, expiry_date: str):
+    return eudi_registry.take(country, doctype, expiry_date)
+
+
+def eudi_status_at(uri: str, idx: int) -> int:
+    return eudi_registry.status_at(uri, idx)
+
+
+def set_eudi_status(uri: str, idx: int, value: int = 1):
+    return eudi_registry.set_status(uri, idx, value)
+
+
+def eudi_list_summaries():
+    return eudi_registry.list_summaries()
+
+
+def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
+    kind, state = eudi_registry.get_by_uri(uri)
+    material = material_for(state.country)
+    certificate = material.certificate_der
+    now = int(time.time())
+    if kind == TOKEN_LIST_KIND:
+        if format_name == "jwt":
+            token = generate_status_list_token(
+                state.statuses,
+                private_key_pem=material.private_pem,
+                issuer=ISSUER,
+                subject=uri,
+                kid=material.kid,
+                certificate_der=certificate,
+                include_exp=False,
+            )
+        else:
+            compressed = zlib.compress(pack_status_values(state.statuses), level=9)
+            payload = {
+                2: uri,
+                6: now,
+                65534: 3600,
+                65533: {"bits": DEFAULT_BITS, "lst": compressed},
+            }
+            token = encode_cwt(
+                payload,
+                material.private_pem,
+                STATUS_LIST_CWT_MEDIA_TYPE,
+                certificate,
+            )
+            return token, STATUS_LIST_CWT_MEDIA_TYPE, state.version
+        return token, "application/statuslist+jwt", state.version
+
+    if format_name == "jwt":
+        token = generate_identifier_list_token(
+            state.identifiers,
+            private_key_pem=material.private_pem,
+            issuer=ISSUER.rstrip("/"),
+            subject=uri,
+            kid=material.kid,
+            certificate_der=certificate,
+        )
+    else:
+        payload = {1: ISSUER.rstrip("/"), 2: uri, 6: now, 65533: state.identifiers}
+        token = encode_cwt(
+            payload,
+            material.private_pem,
+            IDENTIFIER_LIST_CWT_MEDIA_TYPE,
+            certificate,
+        )
+        return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE, state.version
+    return token, "application/identifierlist+jwt", state.version
+
+
+def reset_eudi_registry() -> None:
+    eudi_registry.reset()

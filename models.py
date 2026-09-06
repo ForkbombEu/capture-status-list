@@ -14,6 +14,9 @@ class RandomBatchCreateRequest(BaseModel):
         max_length=32,
         pattern=r"^[A-Za-z0-9_-]+$",
     )
+    country: str = Field(default="EU", min_length=1, max_length=16)
+    doctype: str = Field(default="org.iso.18013.5.1.mDL", min_length=1, max_length=128)
+    expiry_date: str = Field(default="2099-12-31", pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CredentialResponse(BaseModel):
@@ -28,7 +31,7 @@ class CredentialListItem(BaseModel):
     idx: int
     status_list_uri: str
     status: str
-
+    verification_result: str | None = None
 
 class CredentialListResponse(BaseModel):
     credentials: list[CredentialListItem]
@@ -96,6 +99,7 @@ class StatusListBits(BaseModel):
     window_start: int
     window_size: int
     window: str
+    full: str
 
 
 class StatusListDebugResponse(BaseModel):
@@ -110,6 +114,9 @@ class StatusListDebugResponse(BaseModel):
     revoked_indices: list[int]
     lst: StatusListBits
     assignments: list[StatusListAssignment]
+    assignment_offset: int = 0
+    assignment_limit: int = 100
+    assignment_total: int = 0
     jwks: dict[str, list[dict[str, str]]]
 
 

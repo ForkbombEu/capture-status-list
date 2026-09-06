@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import math
 import time
 import zlib
@@ -13,8 +15,60 @@ DEFAULT_BITS = 1
 DEFAULT_STATUS_LIST_SIZE = 10_000
 STATUS_VALID = 0x00
 STATUS_INVALID = 0x01
+
+
 TOKEN_TTL_SECONDS = 43_200
 ALLOWED_BITS = {1, 2, 4, 8}
+
+
+class IndexScatter:
+    """Keyed format-preserving permutation over ``[0, size)``.
+
+    Credentials are allocated in issuance order (a monotonic cursor) but the
+    index they publish is ``permute(cursor)``: observers correlating issuance
+    time and order learn nothing about index proximity, and revoking one index
+    reveals nothing about its neighbours. Mirrors the Feistel scatter used by
+    the German national wallet backend, sized for arbitrary domains via
+    cycle-walking (they require >= 2**20 via FPE; we do not).
+    """
+
+    ROUNDS = 4
+
+    def __init__(self, size: int, seed: bytes) -> None:
+        if size < 1:
+            raise ValueError(f"size must be positive: {size}")
+        self.size = size
+        self.seed = seed
+        self._bits = max((size - 1).bit_length(), 1)
+        self._left = self._bits // 2
+        self._right = self._bits - self._left
+
+    def permute(self, cursor: int) -> int:
+        if not 0 <= cursor < self.size:
+            raise InvalidStatusListIndex(cursor, self.size)
+        value = self._feistel(cursor)
+        while value >= self.size:
+            value = self._feistel(value)
+        return value
+
+    def _feistel(self, value: int) -> int:
+        # Alternating unbalanced Feistel. Each round swaps the half widths, so
+        # an even round count restores the original split; every round is
+        # invertible because the round function reads only the new left half.
+        left_width = self._left
+        right_width = self._right
+        left = (value >> right_width) & ((1 << left_width) - 1)
+        right = value & ((1 << right_width) - 1)
+        for rnd in range(self.ROUNDS):
+            f = self._round(rnd, right) & ((1 << left_width) - 1)
+            left, right = right, left ^ f
+            left_width, right_width = right_width, left_width
+        return (left << right_width) | right
+
+    def _round(self, rnd: int, value: int) -> int:
+        message = rnd.to_bytes(1, "big") + value.to_bytes(8, "big")
+        digest = hmac.new(self.seed, message, hashlib.sha256).digest()
+        return int.from_bytes(digest[:8], "big")
 
 
 class InvalidStatusListIndex(ValueError):
@@ -126,21 +180,57 @@ def generate_status_list_token(
     kid: str,
     bits: int = DEFAULT_BITS,
     ttl: int = TOKEN_TTL_SECONDS,
+    aggregation_uri: str | None = None,
+    certificate_der: bytes | None = None,
+    include_exp: bool = True,
 ) -> str:
     now = int(time.time())
-    payload = {
+    payload: dict[str, object] = {
         "iss": issuer,
         "sub": subject,
         "iat": now,
-        "exp": now + ttl,
-        "ttl": ttl,
-        "status_list": generate_status_list(values, bits=bits),
+        "status_list": generate_status_list(
+            values, bits=bits, aggregation_uri=aggregation_uri
+        ),
     }
-    headers = {
+    if include_exp:
+        payload["exp"] = now + ttl
+        payload["ttl"] = ttl
+    headers: dict[str, object] = {
         "alg": "ES256",
         "kid": kid,
         "typ": "statuslist+jwt",
     }
+    if certificate_der:
+        headers["x5c"] = [base64.b64encode(certificate_der).decode("ascii")]
+    return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
+def generate_identifier_list_token(
+    identifiers: dict[str, int],
+    *,
+    private_key_pem: str,
+    issuer: str,
+    subject: str,
+    kid: str,
+    ttl: int = TOKEN_TTL_SECONDS,
+    certificate_der: bytes | None = None,
+    include_exp: bool = False,
+) -> str:
+    now = int(time.time())
+    payload: dict[str, object] = {
+        "iss": issuer,
+        "sub": subject,
+        "iat": now,
+        "identifier_list": identifiers,
+    }
+    if include_exp:
+        payload["exp"] = now + ttl
+    headers: dict[str, object] = {
+        "alg": "ES256",
+        "kid": kid,
+        "typ": "application/identifierlist+jwt",
+    }
+    if certificate_der:
+        headers["x5c"] = [base64.b64encode(certificate_der).decode("ascii")]
     return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
 
 

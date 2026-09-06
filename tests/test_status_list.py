@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from app import app
 from issuer import STATUS_LIST_URI, public_key_pem, reset_state
 from status_list import (
+    TOKEN_TTL_SECONDS,
+    IndexScatter,
     InvalidStatusListIndex,
     decode_status_list,
     encode_status_list,
@@ -24,7 +26,7 @@ def test_tsl_001_valid_credential() -> None:
 
     token = client.get("/status/1").text
 
-    assert created["idx"] == 42
+    assert 0 <= created["idx"] < 10_000
     assert check_status(created["idx"], token) == "VALID"
 
 
@@ -115,11 +117,13 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
 
     client = TestClient(app)
     reset_state()
-    client.post("/credentials", json={"credential_id": "cred-001"})
-    client.post("/credentials", json={"credential_id": "cred-002"})
+    client.post("/credentials", json={"credential_id": "cred-001", "idx": 5})
+    client.post("/credentials", json={"credential_id": "cred-002", "idx": 6})
     client.post("/credentials/cred-001/revoke")
+    response = client.get("/debug/status-list")
+    decoded = response.json()
 
-    decoded = client.get("/debug/status-list").json()
+    assert response.headers["cache-control"] == "no-store"
 
     assert decoded["warning"] == "TEST/DEBUG ONLY"
     assert decoded["token"].count(".") == 2
@@ -134,21 +138,26 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
     assert decoded["size"] == 10000
     assert decoded["revoked"] == 1
     assert decoded["valid"] == 9999
-    assert decoded["revoked_indices"] == [42]
-    assert decoded["assignments"] == [
-        {"idx": 42, "credential_id": "cred-001", "status": "REVOKED"},
-        {"idx": 43, "credential_id": "cred-002", "status": "VALID"},
-    ]
+    assignments = decoded["assignments"]
+    revoked = next(a for a in assignments if a["status"] == "REVOKED")
+    valid = next(a for a in assignments if a["status"] == "VALID")
+    assert decoded["revoked_indices"] == [revoked["idx"]]
+    assert {a["credential_id"] for a in assignments} == {"cred-001", "cred-002"}
+    assert revoked["credential_id"] == "cred-001"
     lst = decoded["lst"]
     assert lst["entries"] == 10000
     assert lst["inflated_bytes"] == 1250
     assert lst["compressed_bytes"] < lst["inflated_bytes"]
     assert lst["chars_per_entry"] == 1
-    assert lst["window_start"] == 0
     assert lst["window_size"] == 256
     assert len(lst["window"]) == 256
-    assert lst["window"][42] == "1"
-    assert lst["window"][43] == "0"
+    assert len(lst["full"]) == 10000
+    start = lst["window_start"]
+    assert start == 0
+    assert lst["full"][revoked["idx"]] == "1"
+    assert lst["full"][valid["idx"]] == "0"
+    assert lst["window"][revoked["idx"] - start] == "1"
+    assert lst["window"][valid["idx"] - start] == "0"
     assert set(lst["window"]) == {"0", "1"}
 
     assert decoded["jwks"]["keys"][0]["kid"] == "mock-eudi-status-list-1"
@@ -159,3 +168,64 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
     ).text.strip('"')
     served_payload = jwt.decode(served, options={"verify_signature": False})
     assert served_payload["status_list"] == decoded["payload"]["status_list"]
+
+
+def test_index_scatter_is_bijective_deterministic_and_nonsequential() -> None:
+    size = 1_000
+    scatter = IndexScatter(size, seed=b"k" * 32)
+    permuted = [scatter.permute(i) for i in range(size)]
+
+    assert sorted(permuted) == list(range(size))
+    assert permuted != list(range(size))
+    again = IndexScatter(size, seed=b"k" * 32)
+    assert [again.permute(i) for i in range(size)] == permuted
+
+
+def test_index_scatter_varies_with_seed() -> None:
+    first = IndexScatter(1_000, seed=b"a" * 32)
+    second = IndexScatter(1_000, seed=b"b" * 32)
+
+    assert [first.permute(i) for i in range(32)] != [
+        second.permute(i) for i in range(32)
+    ]
+
+
+def test_index_scatter_rejects_out_of_domain_cursor() -> None:
+    scatter = IndexScatter(1_000, seed=b"c" * 32)
+
+    try:
+        scatter.permute(1_000)
+    except InvalidStatusListIndex:
+        pass
+    else:
+        raise AssertionError("expected out-of-domain cursor to fail")
+
+
+def test_status_list_token_sends_cache_headers() -> None:
+    response = client.get("/status/1")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == f"max-age={TOKEN_TTL_SECONDS}"
+    assert response.headers["etag"].startswith("W/")
+
+
+def test_status_list_revalidates_with_etag() -> None:
+    first = client.get("/status/1")
+
+    cached = client.get("/status/1", headers={"If-None-Match": first.headers["etag"]})
+
+    assert cached.status_code == 304
+    assert cached.headers["etag"] == first.headers["etag"]
+
+
+def test_status_list_etag_changes_on_revocation() -> None:
+    client.post("/credentials", json={"credential_id": "cred-001"})
+    first = client.get("/status/1")
+
+    client.post("/credentials/cred-001/revoke")
+    revalidated = client.get(
+        "/status/1", headers={"If-None-Match": first.headers["etag"]}
+    )
+
+    assert revalidated.status_code == 200
+    assert revalidated.headers["etag"] != first.headers["etag"]

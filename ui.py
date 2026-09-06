@@ -86,6 +86,19 @@ APP_CSS = """
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
+    .batch-card { max-width: none; }
+    .batch-fields {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0 var(--space-3);
+    }
+    .batch-fields .field-label { margin-top: var(--space-3); }
+    @media (max-width: 900px) {
+      .batch-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      .batch-fields { grid-template-columns: 1fr; }
+    }
     .test-table-wrap { max-width: 100%; }
     .field-label {
       display: block;
@@ -105,6 +118,23 @@ APP_CSS = """
       width: 100%;
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
+
+    .credential-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .credential-scroll .test-table-wrap { overflow: visible; }
+    .decoded-credentials-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .decoded-credentials-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
       border-color: var(--brand-primary);
@@ -205,6 +235,107 @@ APP_CSS = """
     }
     .decoded-grid > * { min-width: 0; }
     .decoded-grid pre { max-height: 320px; overflow: auto; }
+    .bitmap-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .bitmap-scroll,
+    .bitmap-minimap-scroll {
+      /* Ten visible rows; the full spectrum remains vertically scrollable. */
+      height: calc(10 * 1.6rem + 2 * var(--space-4));
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-muted);
+    }
+    .bitmap-minimap-scroll {
+      overflow: hidden;
+      position: relative;
+    }
+    .bitmap-scroll:focus-visible,
+    .bitmap-minimap-scroll:focus-visible {
+      outline: 3px solid var(--brand-accent);
+      outline-offset: 2px;
+    }
+    .bitmap-minimap {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      padding: var(--space-2);
+      font-family: var(--font-mono);
+      position: relative;
+    }
+    .bitmap-minimap-line {
+      display: flex;
+      flex: 1 1 0;
+      align-items: center;
+      min-height: 1px;
+    }
+    .bitmap-minimap-marker {
+      width: 100%;
+      height: 100%;
+      min-height: 2px;
+      padding: 0;
+      border: 0;
+      border-radius: 1px;
+      background: var(--destructive);
+      color: transparent;
+      cursor: pointer;
+      font-size: 0;
+      line-height: 1;
+    }
+    .bitmap-minimap-marker:hover,
+    .bitmap-minimap-marker:focus-visible {
+      background: var(--destructive);
+      outline: 2px solid var(--destructive);
+      outline-offset: 1px;
+    }
+    .bitmap-minimap-row-jump {
+      width: 100%;
+      height: 100%;
+      min-height: 2px;
+      padding: 0;
+      border: 0;
+      border-radius: 1px;
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
+      font-size: 0;
+      line-height: 1;
+    }
+    .bitmap-minimap-row-jump:hover,
+    .bitmap-minimap-row-jump:focus-visible {
+      background: var(--brand-secondary-strong);
+      outline: 2px solid var(--brand-accent);
+      outline-offset: 1px;
+    }
+    .bitmap-minimap-viewport {
+      position: absolute;
+      inset-inline: 0;
+      border: 2px solid var(--brand-accent);
+      background: var(--brand-secondary-strong);
+      opacity: 0.35;
+      cursor: grab;
+      touch-action: none;
+      z-index: 1;
+    }
+    .bitmap-minimap-viewport:active,
+    .bitmap-minimap-viewport.dragging {
+      cursor: grabbing;
+      opacity: 0.5;
+    }
+    .bitmap-minimap-empty {
+      display: block;
+      padding: var(--space-2) 0;
+      color: var(--fg-muted);
+      font-size: var(--fs-xs);
+      line-height: 1.2;
+      text-align: center;
+      writing-mode: vertical-rl;
+    }
     /* Inflated `lst`: one character per entry, 64 per row, with the row's
        first index in the gutter. */
     .bitmap {
@@ -222,7 +353,13 @@ APP_CSS = """
     }
     .bitmap-index { color: var(--fg-muted); white-space: nowrap; }
     .bitmap-row { color: var(--fg-subtle); white-space: pre; }
-    .bitmap-row b { color: var(--destructive); font-weight: 700; }
+    .bitmap-row b {
+      color: var(--fg-on-primary);
+      background: var(--destructive);
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      padding-inline: 1px;
+    }
     .bitmap-caption {
       margin-top: var(--space-2);
       color: var(--fg-subtle);
@@ -310,7 +447,7 @@ _EXTRAS_BOTTOM = f"""    <div class="extras-bottom">
 
 
 def _topbar(active: str) -> str:
-    links = (("Console", "/"), ("API docs", "/docs"), ("Status list token", "/status/1"))
+    links = (("Console", "/"), ("API docs", "/docs"), ("Status list API", "/token_status_list/take"))
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
             href=href,
@@ -339,8 +476,8 @@ _FOOTER = f"""  <footer class="footer">
         </div>
         <div class="footer-links">
           <div class="footer-col">
-            <h5>Endpoints</h5>
-            <a href="/status/1">Status list token</a>
+            <a href="/token_status_list/take">Status list API</a>
+            <a href="/status/1">Legacy status list token</a>
             <a href="/.well-known/jwks.json">JWKS</a>
             <a href="/docs">API docs</a>
           </div>
@@ -392,82 +529,86 @@ _CONSOLE_BODY = """  <header class="hero">
     <div class="hero-inner">
       <p class="eyebrow">EUDI conformance utility</p>
       <h1>Token status list console</h1>
-      <p>Create test credentials, revoke selected entries, and verify them against the
-        signed Status List Token served at <span class="mono">/status/1</span>.</p>
+        <p>Create test credentials, revoke selected entries, and verify them against the
+        signed Status List Token. The registry debugger below exposes paired country × doctype
+        Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
     </div>
   </header>
   <main class="container page-content">
     <div class="stack">
-      <div class="card-grid card-grid-3">
-        <section class="card">
-          <div class="section-header"><h2>Add batch</h2></div>
-          <label class="field-label" for="count">Count</label>
-          <input id="count" type="number" min="1" max="500" value="10">
-          <label class="field-label" for="prefix">Credential prefix</label>
-          <input id="prefix" type="text" value="cred">
-          <div class="btn-stack">
-            <button id="create" class="btn btn-md btn-primary">Create random batch</button>
+      <section class="card batch-card">
+        <div class="section-header"><h2>Add batch</h2></div>
+        <div class="batch-fields">
+          <div>
+            <label class="field-label" for="count">Count</label>
+            <input id="count" type="number" min="1" max="500" value="10">
           </div>
-        </section>
-        <section class="card">
-          <div class="section-header"><h2>Selected credentials</h2></div>
-          <p class="text-sm text-muted">Batch actions apply to every checked row in the table below.</p>
-          <div class="btn-stack">
-            <button id="verify" class="btn btn-md btn-secondary">Verify selected</button>
-            <button id="revoke" class="btn btn-md btn-destructive">Revoke selected</button>
+          <div>
+            <label class="field-label" for="prefix">Credential prefix</label>
+            <input id="prefix" type="text" value="cred">
           </div>
-        </section>
-        <section class="card">
-          <div class="section-header"><h2>Server state</h2></div>
-          <p class="text-sm text-muted">Reset clears every in-memory credential and status entry.</p>
-          <div class="btn-stack">
-            <button id="refresh" class="btn btn-md btn-outline">Refresh</button>
-            <button id="reset" class="btn btn-md btn-outline">Reset state</button>
+          <div>
+            <label class="field-label" for="country">Country</label>
+            <input id="country" type="text" value="EU" maxlength="16">
           </div>
-        </section>
-      </div>
+          <div>
+            <label class="field-label" for="doctype">Doctype</label>
+            <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+          </div>
+          <div>
+            <label class="field-label" for="expiry-date">List expiry</label>
+            <input id="expiry-date" type="date" value="2099-12-31">
+          </div>
+        </div>
+        <div class="btn-row mt-4">
+          <button id="create" class="btn btn-md btn-primary">Create random batch</button>
+        </div>
+      </section>
 
-      <section class="metric-grid" aria-label="Credential metrics">
-        <div class="card">
-          <strong class="metric-value" id="total">0</strong>
-          <span class="eyebrow">Total credentials</span>
+      <section class="card">
+        <div class="section-header">
+          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
+          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
         </div>
-        <div class="card">
-          <strong class="metric-value" id="valid">0</strong>
-          <span class="eyebrow">Valid</span>
-        </div>
-        <div class="card">
-          <strong class="metric-value" id="revoked">0</strong>
-          <span class="eyebrow">Revoked</span>
-        </div>
-        <div class="card">
-          <strong class="metric-value" id="verified">0</strong>
-          <span class="eyebrow">Verified rows</span>
+        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>.</p>
+        <div class="test-table-wrap">
+          <table class="test-table">
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th><th>Token formats</th></tr></thead>
+            <tbody id="registry-rows"></tbody>
+          </table>
         </div>
       </section>
 
       <section class="card">
         <div class="section-header">
           <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
-          <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+          <div class="btn-row">
+            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
+            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
+            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+          </div>
         </div>
         <div class="btn-row mb-4">
           <button id="all" class="btn btn-sm btn-outline">Select all</button>
           <button id="none" class="btn btn-sm btn-outline">Select none</button>
+          <button id="verify" class="btn btn-sm btn-secondary">Verify selected</button>
+          <button id="revoke" class="btn btn-sm btn-destructive">Revoke selected</button>
         </div>
-        <div class="test-table-wrap">
-          <table class="test-table">
-            <thead>
-              <tr>
-                <th><span class="text-xs">Pick</span></th>
-                <th>Credential</th>
-                <th>Index</th>
-                <th>Status</th>
-                <th>Verification</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
+        <div class="credential-scroll">
+          <div class="test-table-wrap">
+            <table class="test-table">
+              <thead>
+                <tr>
+                  <th><span class="text-xs">Pick</span></th>
+                  <th>Credential</th>
+                  <th>Index</th>
+                  <th>Status</th>
+                  <th>Verification</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -515,23 +656,33 @@ _CONSOLE_BODY = """  <header class="hero">
             <span class="eyebrow">Revoked</span>
           </div>
         </div>
-        <p class="eyebrow mt-4">Inflated lst</p>
-        <div class="bitmap" id="lst-bitmap"></div>
+        <p class="eyebrow mt-4">Inflated lst spectrum</p>
+        <div class="bitmap-shell">
+          <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
+            <div class="bitmap" id="lst-bitmap"></div>
+          </div>
+          <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
+            <div class="bitmap-minimap" id="lst-minimap"></div>
+          </div>
+        </div>
         <p class="bitmap-caption" id="lst-caption"></p>
         <p class="eyebrow mt-4">Revoked indices</p>
         <p class="index-list" id="lst-indices">None</p>
-        <div class="test-table-wrap mt-4">
-          <table class="test-table">
-            <thead>
-              <tr>
-                <th>Credential</th>
-                <th>Index</th>
-                <th>Decoded status</th>
-              </tr>
-            </thead>
-            <tbody id="lst-rows"></tbody>
-          </table>
+        <div class="decoded-credentials-scroll">
+          <div class="test-table-wrap">
+            <table class="test-table">
+              <thead>
+                <tr>
+                  <th>Credential</th>
+                  <th>Index</th>
+                  <th>Decoded status</th>
+                </tr>
+              </thead>
+              <tbody id="lst-rows"></tbody>
+            </table>
+          </div>
         </div>
+        <div class="btn-row mt-4" id="assignment-pagination"></div>
 
         <h3 class="subhead">Signing key</h3>
         <p class="eyebrow">JWKS · /.well-known/jwks.json</p>
@@ -548,11 +699,9 @@ _CONSOLE_BODY = """  <header class="hero">
 
 _CONSOLE_SCRIPT = """<script>
     const rows = document.querySelector("#rows");
+    const registryRows = document.querySelector("#registry-rows");
+    const registryCount = document.querySelector("#registry-count");
     const out = document.querySelector("#out");
-    const total = document.querySelector("#total");
-    const valid = document.querySelector("#valid");
-    const revoked = document.querySelector("#revoked");
-    const verified = document.querySelector("#verified");
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
@@ -578,6 +727,7 @@ _CONSOLE_SCRIPT = """<script>
 
     async function jsonFetch(url, options = {}) {
       const response = await fetch(url, {
+        cache: "no-store",
         headers: { "content-type": "application/json", ...(options.headers || {}) },
         ...options,
       });
@@ -587,26 +737,19 @@ _CONSOLE_SCRIPT = """<script>
       return body;
     }
 
+    let visibleRows = 100;
+
     function render() {
       const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
-      const counts = credentials.reduce((acc, item) => {
-        acc.total += 1;
-        if (item.status === "REVOKED") acc.revoked += 1;
-        if (item.status === "VALID") acc.valid += 1;
-        return acc;
-      }, { total: 0, valid: 0, revoked: 0 });
-      total.textContent = counts.total;
-      valid.textContent = counts.valid;
-      revoked.textContent = counts.revoked;
-      verified.textContent = Object.keys(verification).length;
-      rowCount.textContent = counts.total;
+      rowCount.textContent = credentials.length;
 
       if (!credentials.length) {
         rows.innerHTML = `<tr class="empty-row"><td colspan="5">No credentials yet. Create a random batch to start.</td></tr>`;
         return;
       }
 
-      rows.innerHTML = credentials.map((item, index) => {
+      const shown = credentials.slice(0, visibleRows);
+      rows.innerHTML = shown.map((item, index) => {
         const safeCredentialId = escapeHtml(item.credential_id);
         const checked = selectedIndexes.has(String(index)) ? "checked" : "";
         const key = item.credential_id;
@@ -621,12 +764,77 @@ _CONSOLE_SCRIPT = """<script>
           <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
           <td>${result}</td>
         </tr>`;
-      }).join("");
+      }).join("") + (visibleRows < credentials.length
+        ? `<tr class="show-more-row"><td colspan="5">
+            <button id="show-more" class="btn btn-sm btn-outline" type="button">Show more (${visibleRows} of ${credentials.length})</button>
+          </td></tr>`
+        : "");
+      const showMore = document.querySelector("#show-more");
+      if (showMore) showMore.onclick = () => {
+        visibleRows = Math.min(credentials.length, visibleRows + 200);
+        render();
+      };
+    }
+
+    let formatPreview = null;
+
+    function renderRegistry(lists) {
+      registryCount.textContent = lists.length;
+      const sameOrigin = (uri) => uri.replace(/^https?:\\/\\/[^/]+/, window.location.origin);
+      registryRows.innerHTML = lists.length
+        ? lists.map((item) => {
+            const tokenUri = sameOrigin(item.status_list_uri);
+            const identifierUri = sameOrigin(item.identifier_list_uri);
+            return `<tr>
+            <td class="cell-mono">${escapeHtml(item.country)}</td>
+            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            <td class="cell-mono">${escapeHtml(item.list_id)}</td>
+            <td>${item.allocated}</td><td>${item.revoked}</td>
+            <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
+            <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
+            <td>
+              <div class="btn-row">
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+jwt">ARL · JWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+cwt">ARL · CWT</button>
+              </div>
+            </td>
+          </tr>`;
+          }).join("")
+        : `<tr class="empty-row"><td colspan="8">No country × doctype lists allocated yet.</td></tr>`;
+      registryRows.querySelectorAll("button[data-preview]").forEach((button) => {
+        button.onclick = async () => {
+          const response = await fetch(button.dataset.preview, {
+            cache: "no-store",
+            headers: { Accept: button.dataset.media },
+          });
+          if (!response.ok) {
+            write(`Token fetch failed: ${response.status}`);
+            return;
+          }
+          const type = response.headers.get("content-type") || "";
+          const body = type.includes("cwt")
+            ? [...new Uint8Array(await response.arrayBuffer())]
+            : await response.text();
+          formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
+          write(formatPreview);
+        };
+      });
     }
 
     async function load() {
-      const data = await jsonFetch("/credentials");
+      const [data, lists] = await Promise.all([
+        jsonFetch("/credentials"),
+        jsonFetch("/debug/status-lists"),
+      ]);
       credentials = data.credentials;
+      verification = Object.fromEntries(
+        credentials
+          .filter((item) => item.verification_result)
+          .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
+      );
+      renderRegistry(lists);
       render();
     }
 
@@ -634,6 +842,9 @@ _CONSOLE_SCRIPT = """<script>
       const body = {
         count: Number(document.querySelector("#count").value || 10),
         prefix: document.querySelector("#prefix").value || "cred",
+        country: document.querySelector("#country").value || "EU",
+        doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
+        expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
       };
       const data = await jsonFetch("/credentials/random-batch", {
         method: "POST",
@@ -641,6 +852,7 @@ _CONSOLE_SCRIPT = """<script>
       });
       write(data);
       await load();
+      await refreshToken(true);
     };
 
     document.querySelector("#revoke").onclick = async () => {
@@ -652,7 +864,7 @@ _CONSOLE_SCRIPT = """<script>
       });
       write(data);
       await load();
-      await refreshToken();
+      await refreshToken(true);
     };
 
     document.querySelector("#verify").onclick = async () => {
@@ -662,13 +874,15 @@ _CONSOLE_SCRIPT = """<script>
         method: "POST",
         body: JSON.stringify({ credential_ids: ids }),
       });
-      verification = Object.fromEntries(data.verified.map((item) => [item.credential_id, item]));
       write(data);
       render();
     };
 
     document.querySelector("#refresh").onclick = load;
+    document.querySelector("#registry-refresh").onclick = load;
     document.querySelector("#all").onclick = () => {
+      visibleRows = credentials.length;
+      render();
       document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
     };
     document.querySelector("#none").onclick = () => {
@@ -693,30 +907,127 @@ _CONSOLE_SCRIPT = """<script>
 
     // One character per entry (two when bits is 8), 64 entries to a row, with
     // every non-zero — that is, revoked — entry marked.
-    function renderBitmap(lst) {
+    function renderBitmap(lst, revokedIndices) {
+      const bitmapScroll = document.querySelector("#lst-bitmap-scroll");
       const bitmap = document.querySelector("#lst-bitmap");
+      const minimap = document.querySelector("#lst-minimap");
+      const full = lst.full || lst.window;
       const width = ROW_ENTRIES * lst.chars_per_entry;
       let html = "";
+      let minimapHtml = "";
 
-      for (let offset = 0; offset < lst.window.length; offset += width) {
-        const row = lst.window.slice(offset, offset + width);
-        const index = lst.window_start + offset / lst.chars_per_entry;
+      for (let offset = 0, rowNumber = 0; offset < full.length; offset += width, rowNumber += 1) {
+        const row = full.slice(offset, offset + width);
+        const index = offset / lst.chars_per_entry;
+        const rowRevoked = revokedIndices.filter((entry) => entry >= index && entry < index + row.length / lst.chars_per_entry);
         const marked = [...row]
           .map((char, position) => {
             const spacer = position > 0 && position % (8 * lst.chars_per_entry) === 0 ? " " : "";
             return spacer + (char === "0" ? char : `<b>${escapeHtml(char)}</b>`);
           })
           .join("");
-        html += `<span class="bitmap-index">${index}</span><span class="bitmap-row">${marked}</span>`;
+        html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
+        const marker = rowRevoked.length
+          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}"></button>`
+          : `<button class="bitmap-minimap-row-jump" type="button" data-row="${rowNumber}" aria-label="Jump to entries starting at ${index}" title="Entries ${index} to ${index + ROW_ENTRIES - 1}"></button>`;
+        minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
       }
 
       bitmap.innerHTML = html;
-      const last = lst.window_start + lst.window_size - 1;
+      minimap.innerHTML = `<div class="bitmap-minimap-viewport" role="slider" tabindex="0" aria-label="Spectrum scroll position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>` +
+        (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
+      const totalRows = Math.ceil(full.length / width);
+      minimap.querySelectorAll("button[data-row]").forEach((marker) => {
+        marker.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const rowNumber = Number(marker.dataset.row);
+          const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+          const target = totalRows <= 1 ? 0 : rowNumber / (totalRows - 1) * maxScroll;
+          bitmapScroll.scrollTo({ top: target, behavior: "auto" });
+        };
+      });
+
+      const viewport = minimap.querySelector(".bitmap-minimap-viewport");
+      const syncViewport = () => {
+        const contentHeight = Math.max(1, bitmapScroll.scrollHeight);
+        const progress = bitmapScroll.scrollTop / Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        viewport.style.top = `${bitmapScroll.scrollTop / contentHeight * 100}%`;
+        viewport.style.height = `${bitmapScroll.clientHeight / contentHeight * 100}%`;
+        viewport.setAttribute("aria-valuenow", String(Math.round(progress * 100)));
+      };
+      let dragStartY = null;
+      let dragStartScroll = 0;
+      viewport.addEventListener("pointerdown", (event) => {
+        dragStartY = event.clientY;
+        dragStartScroll = bitmapScroll.scrollTop;
+        viewport.classList.add("dragging");
+        viewport.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      viewport.addEventListener("pointermove", (event) => {
+        if (dragStartY === null) return;
+        const track = Math.max(1, minimap.clientHeight - viewport.offsetHeight);
+        const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        bitmapScroll.scrollTop = dragStartScroll + (event.clientY - dragStartY) / track * maxScroll;
+      });
+      const stopDrag = (event) => {
+        if (dragStartY === null) return;
+        dragStartY = null;
+        viewport.classList.remove("dragging");
+        if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      };
+      viewport.addEventListener("pointerup", stopDrag);
+      viewport.addEventListener("pointercancel", stopDrag);
+      viewport.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        bitmapScroll.scrollTop += event.key === "ArrowDown" ? bitmapScroll.clientHeight / 5 : -bitmapScroll.clientHeight / 5;
+        event.preventDefault();
+      });
+      bitmapScroll.onscroll = syncViewport;
+      syncViewport();
+      const last = lst.entries - 1;
       document.querySelector("#lst-caption").textContent =
-        `Entries ${lst.window_start} to ${last} of ${lst.entries}. ` +
-        `0 is valid, 1 is revoked.`;
+        `Entries 0 to ${last} of ${lst.entries}. Red bars mark revoked rows; click a bar to jump there.`;
     }
 
+    function renderAssignments(data) {
+      const rows = document.querySelector("#lst-rows");
+      rows.innerHTML = data.assignments.length
+        ? data.assignments.map((item) => `<tr>
+            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
+            <td class="cell-mono">${item.idx}</td>
+            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="3">No credential is assigned to an index yet.</td></tr>`;
+      const pagination = document.querySelector("#assignment-pagination");
+      pagination.innerHTML = "";
+      if (data.assignment_total <= data.assignment_limit) return;
+      const start = data.assignment_offset + 1;
+      const end = Math.min(data.assignment_total, data.assignment_offset + data.assignment_limit);
+      const label = document.createElement("span");
+      label.className = "text-sm text-muted";
+      label.textContent = `Showing ${start}–${end} of ${data.assignment_total}`;
+      pagination.append(label);
+      const previous = document.createElement("button");
+      previous.className = "btn btn-sm btn-outline";
+      previous.type = "button";
+      previous.textContent = "Previous";
+      previous.disabled = data.assignment_offset === 0;
+      previous.onclick = async () => renderDecodedToken(await jsonFetch(
+        `/debug/status-list?assignment_offset=${Math.max(0, data.assignment_offset - data.assignment_limit)}&assignment_limit=${data.assignment_limit}`
+      ));
+      const next = document.createElement("button");
+      next.className = "btn btn-sm btn-outline";
+      next.type = "button";
+      next.textContent = "Next";
+      next.disabled = end >= data.assignment_total;
+      next.onclick = async () => renderDecodedToken(await jsonFetch(
+        `/debug/status-list?assignment_offset=${data.assignment_offset + data.assignment_limit}&assignment_limit=${data.assignment_limit}`
+      ));
+      pagination.append(previous, next);
+
+    }
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
@@ -727,8 +1038,7 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
       document.querySelector("#lst-revoked").textContent = data.revoked;
-
-      renderBitmap(data.lst);
+      renderBitmap(data.lst, data.revoked_indices);
       document.querySelector("#lst-note").textContent =
         `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
         `${data.lst.inflated_bytes} bytes holding ${data.lst.entries} entries at ` +
@@ -740,14 +1050,7 @@ _CONSOLE_SCRIPT = """<script>
         ? shown.join(", ") + (rest > 0 ? `, and ${rest} more` : "")
         : "None";
 
-      const rows = document.querySelector("#lst-rows");
-      rows.innerHTML = data.assignments.length
-        ? data.assignments.map((item) => `<tr>
-            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
-            <td class="cell-mono">${item.idx}</td>
-            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">No credential is assigned to an index yet.</td></tr>`;
+      renderAssignments(data);
 
       tokenCard.hidden = false;
     }
@@ -767,11 +1070,9 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-
-    // A revoke or a reset changes the list the token encodes, so the decoded
-    // view is refreshed whenever it is already on screen.
-    async function refreshToken() {
-      if (tokenCard.hidden) return;
+    // Mutations change the list payload; always fetch a fresh decoded view.
+    async function refreshToken(force = false) {
+      if (tokenCard.hidden && !force) return;
       renderDecodedToken(await jsonFetch("/debug/status-list"));
     }
 
@@ -781,12 +1082,13 @@ _CONSOLE_SCRIPT = """<script>
       write("Status list token fetched. The decoded token, status list and signing key are shown above the output.");
       tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
     };
+
     document.querySelector("#reset").onclick = async () => {
       const data = await jsonFetch("/reset", { method: "POST" });
       verification = {};
       write(data);
       await load();
-      await refreshToken();
+      await refreshToken(true);
     };
 
     load().catch(write);

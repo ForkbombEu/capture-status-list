@@ -47,7 +47,7 @@ def test_tsl_008_revocation_propagation() -> None:
 
 
 def test_verify_endpoint_rejects_revoked_credential() -> None:
-    client.post("/credentials", json={"credential_id": "cred-001"})
+    created = client.post("/credentials", json={"credential_id": "cred-001"}).json()
     client.post("/credentials/cred-001/revoke")
 
     response = client.post("/verify/cred-001")
@@ -55,7 +55,7 @@ def test_verify_endpoint_rejects_revoked_credential() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "credential_id": "cred-001",
-        "idx": 42,
+        "idx": created["idx"],
         "result": "REJECT",
         "status": "REVOKED",
     }

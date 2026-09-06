@@ -1,22 +1,36 @@
+import os
 import zlib
+from dataclasses import asdict
 from pathlib import Path
+from urllib.parse import parse_qs
 from uuid import uuid4
+
 
 import jwt
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from issuer import (
     STATUS_LIST_URI,
+    build_eudi_token,
     create_credential_record,
+    credential_verification_result,
     debug_status_at,
+    eudi_list_summaries,
+    eudi_registry,
+    eudi_status_at,
     generate_current_status_list_token,
     get_credential_record,
     list_credential_records,
+    mark_credential_verification,
+    list_version,
     public_jwks,
+    reset_eudi_registry,
     reset_state,
+    set_eudi_status,
+    take_eudi_reference,
     revoke_credential_record,
 )
 from models import (
@@ -40,6 +54,7 @@ from models import (
 )
 from status_list import (
     STATUS_INVALID,
+    TOKEN_TTL_SECONDS,
     InvalidStatusListIndex,
     base64url_decode,
     status_label,
@@ -80,12 +95,14 @@ def _verify_record(credential_id: str, token: str | None = None) -> VerifyRespon
     except (InvalidStatusListIndex, VerificationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return VerifyResponse(
+    result = VerifyResponse(
         credential_id=credential.credential_id,
         idx=credential.idx,
         result="ACCEPT" if status == "VALID" else "REJECT",
         status=status,
     )
+    mark_credential_verification(credential.credential_id, result.result)
+    return result
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -112,6 +129,7 @@ def list_credentials() -> CredentialListResponse:
                 idx=record.idx,
                 status_list_uri=record.status_list_uri,
                 status=debug_status_at(record.idx),
+                verification_result=credential_verification_result(record.credential_id),
             )
             for record in list_credential_records()
         ]
@@ -135,10 +153,20 @@ def create_random_batch(request: RandomBatchCreateRequest) -> RandomBatchCreateR
         for _attempt in range(10):
             credential_id = f"{request.prefix}-{uuid4().hex[:12]}"
             try:
-                created.append(create_credential_record(credential_id))
+                reference = take_eudi_reference(
+                    request.country, request.doctype, request.expiry_date
+                )
+                created.append(
+                    create_credential_record(
+                        credential_id,
+                        eudi_reference=(reference.status_list_uri, reference.idx),
+                    )
+                )
                 break
             except KeyError:
                 continue
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         else:
             raise HTTPException(
                 status_code=409,
@@ -167,10 +195,186 @@ def revoke_batch(request: CredentialIdsRequest) -> RevokeBatchResponse:
     return RevokeBatchResponse(revoked=revoked, errors=errors)
 
 
+async def _reference_form(request: Request) -> dict[str, str]:
+    values = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+    return {key: entries[-1] for key, entries in values.items()}
+
+
+def _require_reference_key(request: Request) -> None:
+    if request.headers.get("x-api-key") != os.environ.get("EUDI_API_KEY", "test"):
+        raise HTTPException(status_code=401, detail="Incorrect API key")
+
+
+def _reference_index(form: dict[str, str]) -> int:
+    raw = form.get("id") or form.get("idx")
+    if raw is None:
+        raise ValueError("Missing URI or idx/id")
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("'id' or 'idx' unknown") from exc
+
+
+def _reference_format(request: Request, kind: str) -> str:
+    accept = request.headers.get("accept", "")
+    return "cwt" if f"application/{kind}+cwt" in accept else "jwt"
+
+
+@app.post("/token_status_list/take")
+async def take_status_list(request: Request) -> dict:
+    _require_reference_key(request)
+    form = await _reference_form(request)
+    try:
+        reference = take_eudi_reference(
+            form["country"], form["doctype"], form["expiry_date"]
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "status_list": {"uri": reference.status_list_uri, "idx": reference.idx},
+        "identifier_list": {
+            "uri": reference.identifier_list_uri,
+            "id": str(reference.idx),
+        },
+    }
+
+
+def _serve_reference_list(uri: str, request: Request, kind: str) -> Response:
+    try:
+        token, media_type, version = build_eudi_token(uri, _reference_format(request, kind))
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    etag = f'W/"{version}"'
+    headers = {
+        "Cache-Control": f"max-age={TOKEN_TTL_SECONDS}",
+        "ETag": etag,
+        "Vary": "Accept",
+    }
+    if request.headers.get("if-none-match") and _etag_matches(
+        request.headers["if-none-match"], etag
+    ):
+        return Response(status_code=304, headers=headers, media_type=media_type)
+    body = token if isinstance(token, bytes) else token.encode("utf-8")
+    return Response(content=body, media_type=media_type, headers=headers)
+
+
+@app.get("/token_status_list/{country}/{doctype}/{list_id}")
+def serve_status_list(country: str, doctype: str, list_id: str, request: Request) -> Response:
+    return _serve_reference_list(
+        f"http://localhost:8000/token_status_list/{country}/{doctype}/{list_id}",
+        request,
+        "statuslist",
+    )
+
+
+@app.get("/identifier_list/{country}/{doctype}/{list_id}")
+def serve_identifier_list(country: str, doctype: str, list_id: str, request: Request) -> Response:
+    return _serve_reference_list(
+        f"http://localhost:8000/identifier_list/{country}/{doctype}/{list_id}",
+        request,
+        "identifierlist",
+    )
+
+
+def _get_reference_status(request: Request, expected_kind: str) -> PlainTextResponse:
+    uri = request.query_params.get("uri")
+    raw_idx = request.query_params.get("id") or request.query_params.get("idx")
+    if not uri or raw_idx is None:
+        raise HTTPException(status_code=400, detail="Missing URI or idx/id")
+    try:
+        idx = int(raw_idx)
+        kind, _ = eudi_registry.get_by_uri(uri)
+        if kind != expected_kind:
+            raise ValueError("wrong list type")
+        value = eudi_status_at(uri, idx)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PlainTextResponse(str(value))
+
+
+@app.get("/token_status_list/get")
+def get_token_status(request: Request) -> PlainTextResponse:
+    return _get_reference_status(request, "token_status_list")
+
+
+@app.get("/identifier_list/get")
+def get_identifier_status(request: Request) -> PlainTextResponse:
+    return _get_reference_status(request, "identifier_list")
+
+
+async def _set_reference_status(request: Request) -> PlainTextResponse:
+    _require_reference_key(request)
+    form = await _reference_form(request)
+    uri = form.get("uri")
+    try:
+        if not uri:
+            raise ValueError("Missing URI or idx/id")
+        idx = _reference_index(form)
+        if int(form.get("status", "")) != 1:
+            raise ValueError("Wrong Status Change")
+        set_eudi_status(uri, idx, 1)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PlainTextResponse("Status Changed\n")
+
+
+@app.post("/token_status_list/set")
+async def set_token_status(request: Request) -> PlainTextResponse:
+    return await _set_reference_status(request)
+
+
+@app.post("/identifier_list/set")
+async def set_identifier_status(request: Request) -> PlainTextResponse:
+    return await _set_reference_status(request)
+
+
+@app.get("/debug/status-lists")
+def debug_status_lists() -> list[dict]:
+    return [asdict(summary) for summary in eudi_list_summaries()]
+
+
+@app.post("/debug/status-lists/expire")
+async def debug_expire_status_list(request: Request) -> dict[str, str]:
+    body = await request.json()
+    try:
+        uri = str(body["uri"])
+        expiry_date = str(body["expiry_date"])
+        eudi_registry.expire(uri, expiry_date)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "EXPIRED", "uri": uri, "expiry_date": expiry_date}
+
+
+def _status_list_etag() -> str:
+    return f'W/"{list_version()}"'
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    candidates = [tag.strip() for tag in if_none_match.split(",")]
+    bare = etag.removeprefix("W/")
+    return "*" in candidates or etag in candidates or bare in candidates
+
+
 @app.get("/status/1", response_class=PlainTextResponse)
-def status_list_token() -> PlainTextResponse:
+def status_list_token(request: Request) -> PlainTextResponse:
+    """Serve the signed Status List Token with weak-ETag revalidation.
+
+    ``max-age = ttl`` mirrors the German national wallet backend: verifiers
+    cache the token for its validity window and revalidate via
+    ``If-None-Match``, so a revocation propagates within one ttl.
+    """
+    etag = _status_list_etag()
+    headers = {
+        "Cache-Control": f"max-age={TOKEN_TTL_SECONDS}",
+        "ETag": etag,
+    }
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and _etag_matches(if_none_match, etag):
+        return PlainTextResponse(b"", status_code=304, headers=headers)
     token = generate_current_status_list_token()
-    return PlainTextResponse(token, media_type="application/statuslist+jwt")
+    return PlainTextResponse(
+        token, media_type="application/statuslist+jwt", headers=headers
+    )
 
 
 @app.get("/.well-known/jwks.json")
@@ -206,13 +410,20 @@ def debug_status(idx: int) -> DebugStatusResponse:
 
 
 @app.get("/debug/status-list", response_model=StatusListDebugResponse)
-def debug_status_list() -> StatusListDebugResponse:
-    """Decode the current Status List Token into its human-readable parts.
+def debug_status_list(
+    response: Response,
+    assignment_offset: int = 0,
+    assignment_limit: int = 100,
+) -> StatusListDebugResponse:
+    """Decode the current Status List Token for the debugger.
 
-    Test infrastructure: it exposes the token header, payload, the inflated
-    `lst` bit string and the signing JWKS in one response so the console can
-    show what `GET /status/1` actually carries.
+    The status spectrum is returned in full; credential assignment rows are
+    paginated so large fixtures do not require rendering every row at once.
     """
+    if assignment_offset < 0:
+        raise HTTPException(status_code=400, detail="assignment_offset must be non-negative")
+    if assignment_limit < 1 or assignment_limit > 500:
+        raise HTTPException(status_code=400, detail="assignment_limit must be between 1 and 500")
     token = generate_current_status_list_token()
     header = jwt.get_unverified_header(token)
     payload = jwt.decode(token, options={"verify_signature": False})
@@ -225,15 +436,18 @@ def debug_status_list() -> StatusListDebugResponse:
     revoked_indices = [
         idx for idx, value in enumerate(statuses) if value == STATUS_INVALID
     ]
+    records = list_credential_records()
+    assignment_total = len(records)
     assignments = [
         StatusListAssignment(
             idx=record.idx,
             credential_id=record.credential_id,
             status=status_label(statuses[record.idx]),
         )
-        for record in list_credential_records()
+        for record in records[assignment_offset : assignment_offset + assignment_limit]
     ]
 
+    response.headers["Cache-Control"] = "no-store"
     return StatusListDebugResponse(
         token=token,
         header=header,
@@ -248,9 +462,12 @@ def debug_status_list() -> StatusListDebugResponse:
             bits=bits,
             compressed_bytes=len(compressed),
             inflated_bytes=len(inflated),
-            around=[record.idx for record in list_credential_records()],
+            around=[record.idx for record in records],
         ),
         assignments=assignments,
+        assignment_offset=assignment_offset,
+        assignment_limit=assignment_limit,
+        assignment_total=assignment_total,
         jwks=public_jwks(),
     )
 
@@ -273,6 +490,7 @@ def _status_list_bits(
     contain the assigned indices when there are any.
     """
     chars_per_entry = 2 if bits == 8 else 1
+    full = "".join(format(value, "x").rjust(chars_per_entry, "0") for value in statuses)
     first = min(around) if around else 0
     start = max(0, (first // 64) * 64)
     start = min(start, max(0, len(statuses) - STATUS_BITS_WINDOW))
@@ -288,10 +506,12 @@ def _status_list_bits(
         window="".join(
             format(value, "x").rjust(chars_per_entry, "0") for value in window_values
         ),
+        full=full,
     )
 
 
 @app.post("/reset", response_model=ResetResponse)
 def reset() -> ResetResponse:
     reset_state()
+    reset_eudi_registry()
     return ResetResponse()

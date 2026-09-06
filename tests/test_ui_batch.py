@@ -65,6 +65,20 @@ def test_verify_and_revoke_reload_the_status_list_token() -> None:
         assert "await refreshToken(true)" in body, handler
 
 
+def test_format_previews_also_render_the_decoded_debug_token() -> None:
+    html = client.get("/").text
+    script_start = html.index('registryRows.querySelectorAll("button[data-preview]")')
+    body = html[script_start : html.index("async function load()", script_start)]
+
+    assert html.count('data-media="application/statuslist+jwt"') == 1
+    assert html.count('data-media="application/statuslist+cwt"') == 1
+    assert html.count('data-media="application/identifierlist+jwt"') == 1
+    assert html.count('data-media="application/identifierlist+cwt"') == 1
+    assert "write(formatPreview)" in body
+    assert 'renderDecodedToken(await jsonFetch("/debug/status-list"))' in body
+    assert 'tokenCard.scrollIntoView({ behavior: "smooth", block: "start" })' in body
+
+
 
 def test_red_route_is_gone() -> None:
     assert client.get("/red").status_code == 404

@@ -849,6 +849,10 @@ _CONSOLE_SCRIPT = """<script>
             : await response.text();
           formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
           write(formatPreview);
+          // Keep the selected format in Output, while showing the same decoded
+          // status-list dissertation as the credentials token action.
+          renderDecodedToken(await jsonFetch("/debug/status-list"));
+          tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
         };
       });
     }

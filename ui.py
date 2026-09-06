@@ -213,7 +213,8 @@ APP_CSS = """
     }
     .bitmap-scroll,
     .bitmap-minimap-scroll {
-      height: 420px;
+      /* Ten visible rows; the full spectrum remains vertically scrollable. */
+      height: calc(10 * 1.6rem + 2 * var(--space-4));
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius);

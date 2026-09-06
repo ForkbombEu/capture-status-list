@@ -87,6 +87,30 @@ APP_CSS = """
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
     .batch-card { max-width: none; }
+    /* Console layout: the page runs full width as a two-column dashboard —
+       forms and info on the left, results on the right, so every CTA
+       produces feedback the user can see without scrolling away. */
+    .console-container { max-width: none; }
+    .console-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      align-items: start;
+      gap: var(--space-6);
+    }
+    .console-right {
+      position: sticky;
+      top: calc(var(--topbar-height) + var(--space-4));
+      max-height: calc(100vh - var(--topbar-height) - 2 * var(--space-4));
+      overflow-y: auto;
+    }
+    @media (max-width: 1100px) {
+      .console-grid { grid-template-columns: 1fr; }
+      .console-right {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+      }
+    }
     .batch-fields {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -534,8 +558,9 @@ _CONSOLE_BODY = """  <header class="hero">
         Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
     </div>
   </header>
-  <main class="container page-content">
-    <div class="stack">
+  <main class="container console-container page-content">
+    <div class="console-grid">
+      <div class="stack console-left">
       <section class="card batch-card">
         <div class="section-header"><h2>Add batch</h2></div>
         <div class="batch-fields">
@@ -611,6 +636,14 @@ _CONSOLE_BODY = """  <header class="hero">
           </div>
         </div>
       </section>
+
+      </div>
+
+      <aside class="stack console-right" aria-label="Results panel">
+        <section class="card">
+          <div class="section-header"><h2>Output</h2></div>
+          <pre class="output" id="out">Ready</pre>
+        </section>
 
       <section class="card" id="token-card" hidden>
         <div class="section-header">
@@ -689,10 +722,7 @@ _CONSOLE_BODY = """  <header class="hero">
         <pre id="jwks"></pre>
       </section>
 
-      <section class="card">
-        <div class="section-header"><h2>Output</h2></div>
-        <pre class="output" id="out">Ready</pre>
-      </section>
+      </aside>
     </div>
   </main>"""
 
@@ -874,8 +904,12 @@ _CONSOLE_SCRIPT = """<script>
         method: "POST",
         body: JSON.stringify({ credential_ids: ids }),
       });
+      for (const item of data.verified || []) {
+        verification[item.credential_id] = { result: item.result, status: item.status };
+      }
       write(data);
       render();
+      await refreshToken(true);
     };
 
     document.querySelector("#refresh").onclick = load;
@@ -1079,7 +1113,7 @@ _CONSOLE_SCRIPT = """<script>
     document.querySelector("#token").onclick = async () => {
       const data = await jsonFetch("/debug/status-list");
       renderDecodedToken(data);
-      write("Status list token fetched. The decoded token, status list and signing key are shown above the output.");
+      write("Status list token fetched. The decoded token, status list and signing key are shown below the output.");
       tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 

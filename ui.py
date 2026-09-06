@@ -127,6 +127,14 @@ APP_CSS = """
       background: var(--bg);
     }
     .credential-scroll .test-table-wrap { overflow: visible; }
+    .decoded-credentials-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .decoded-credentials-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
       border-color: var(--brand-primary);
@@ -660,18 +668,21 @@ _CONSOLE_BODY = """  <header class="hero">
         <p class="bitmap-caption" id="lst-caption"></p>
         <p class="eyebrow mt-4">Revoked indices</p>
         <p class="index-list" id="lst-indices">None</p>
-        <div class="test-table-wrap mt-4">
-          <table class="test-table">
-            <thead>
-              <tr>
-                <th>Credential</th>
-                <th>Index</th>
-                <th>Decoded status</th>
-              </tr>
-            </thead>
-            <tbody id="lst-rows"></tbody>
-          </table>
+        <div class="decoded-credentials-scroll">
+          <div class="test-table-wrap">
+            <table class="test-table">
+              <thead>
+                <tr>
+                  <th>Credential</th>
+                  <th>Index</th>
+                  <th>Decoded status</th>
+                </tr>
+              </thead>
+              <tbody id="lst-rows"></tbody>
+            </table>
+          </div>
         </div>
+        <div class="btn-row mt-4" id="assignment-pagination"></div>
 
         <h3 class="subhead">Signing key</h3>
         <p class="eyebrow">JWKS · /.well-known/jwks.json</p>
@@ -947,6 +958,43 @@ _CONSOLE_SCRIPT = """<script>
         `Entries 0 to ${last} of ${lst.entries}. Red bars mark revoked rows; click a bar to jump there.`;
     }
 
+    function renderAssignments(data) {
+      const rows = document.querySelector("#lst-rows");
+      rows.innerHTML = data.assignments.length
+        ? data.assignments.map((item) => `<tr>
+            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
+            <td class="cell-mono">${item.idx}</td>
+            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="3">No credential is assigned to an index yet.</td></tr>`;
+      const pagination = document.querySelector("#assignment-pagination");
+      pagination.innerHTML = "";
+      if (data.assignment_total <= data.assignment_limit) return;
+      const start = data.assignment_offset + 1;
+      const end = Math.min(data.assignment_total, data.assignment_offset + data.assignment_limit);
+      const label = document.createElement("span");
+      label.className = "text-sm text-muted";
+      label.textContent = `Showing ${start}–${end} of ${data.assignment_total}`;
+      pagination.append(label);
+      const previous = document.createElement("button");
+      previous.className = "btn btn-sm btn-outline";
+      previous.type = "button";
+      previous.textContent = "Previous";
+      previous.disabled = data.assignment_offset === 0;
+      previous.onclick = async () => renderDecodedToken(await jsonFetch(
+        `/debug/status-list?assignment_offset=${Math.max(0, data.assignment_offset - data.assignment_limit)}&assignment_limit=${data.assignment_limit}`
+      ));
+      const next = document.createElement("button");
+      next.className = "btn btn-sm btn-outline";
+      next.type = "button";
+      next.textContent = "Next";
+      next.disabled = end >= data.assignment_total;
+      next.onclick = async () => renderDecodedToken(await jsonFetch(
+        `/debug/status-list?assignment_offset=${data.assignment_offset + data.assignment_limit}&assignment_limit=${data.assignment_limit}`
+      ));
+      pagination.append(previous, next);
+
+    }
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
@@ -969,14 +1017,7 @@ _CONSOLE_SCRIPT = """<script>
         ? shown.join(", ") + (rest > 0 ? `, and ${rest} more` : "")
         : "None";
 
-      const rows = document.querySelector("#lst-rows");
-      rows.innerHTML = data.assignments.length
-        ? data.assignments.map((item) => `<tr>
-            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
-            <td class="cell-mono">${item.idx}</td>
-            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">No credential is assigned to an index yet.</td></tr>`;
+      renderAssignments(data);
 
       tokenCard.hidden = false;
     }

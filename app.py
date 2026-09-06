@@ -410,13 +410,20 @@ def debug_status(idx: int) -> DebugStatusResponse:
 
 
 @app.get("/debug/status-list", response_model=StatusListDebugResponse)
-def debug_status_list(response: Response) -> StatusListDebugResponse:
-    """Decode the current Status List Token into its human-readable parts.
+def debug_status_list(
+    response: Response,
+    assignment_offset: int = 0,
+    assignment_limit: int = 100,
+) -> StatusListDebugResponse:
+    """Decode the current Status List Token for the debugger.
 
-    Test infrastructure: it exposes the token header, payload, the inflated
-    `lst` bit string and the signing JWKS in one response so the console can
-    show what `GET /status/1` actually carries.
+    The status spectrum is returned in full; credential assignment rows are
+    paginated so large fixtures do not require rendering every row at once.
     """
+    if assignment_offset < 0:
+        raise HTTPException(status_code=400, detail="assignment_offset must be non-negative")
+    if assignment_limit < 1 or assignment_limit > 500:
+        raise HTTPException(status_code=400, detail="assignment_limit must be between 1 and 500")
     token = generate_current_status_list_token()
     header = jwt.get_unverified_header(token)
     payload = jwt.decode(token, options={"verify_signature": False})
@@ -429,13 +436,15 @@ def debug_status_list(response: Response) -> StatusListDebugResponse:
     revoked_indices = [
         idx for idx, value in enumerate(statuses) if value == STATUS_INVALID
     ]
+    records = list_credential_records()
+    assignment_total = len(records)
     assignments = [
         StatusListAssignment(
             idx=record.idx,
             credential_id=record.credential_id,
             status=status_label(statuses[record.idx]),
         )
-        for record in list_credential_records()
+        for record in records[assignment_offset : assignment_offset + assignment_limit]
     ]
 
     response.headers["Cache-Control"] = "no-store"
@@ -453,9 +462,12 @@ def debug_status_list(response: Response) -> StatusListDebugResponse:
             bits=bits,
             compressed_bytes=len(compressed),
             inflated_bytes=len(inflated),
-            around=[record.idx for record in list_credential_records()],
+            around=[record.idx for record in records],
         ),
         assignments=assignments,
+        assignment_offset=assignment_offset,
+        assignment_limit=assignment_limit,
+        assignment_total=assignment_total,
         jwks=public_jwks(),
     )
 

@@ -114,6 +114,9 @@ class StatusListDebugResponse(BaseModel):
     revoked_indices: list[int]
     lst: StatusListBits
     assignments: list[StatusListAssignment]
+    assignment_offset: int = 0
+    assignment_limit: int = 100
+    assignment_total: int = 0
     jwks: dict[str, list[dict[str, str]]]
 
 

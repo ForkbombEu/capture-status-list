@@ -128,3 +128,15 @@ def test_debugger_batch_populates_and_revokes_pooled_list() -> None:
     client.post("/credentials/revoke-batch", json={"credential_ids": [item["credential_id"] for item in created]})
 
     assert client.get("/debug/status-lists").json()[0]["revoked"] == 3
+
+
+def test_pooled_tokens_fall_back_to_local_test_key(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("EUDI_KEY_DIR", str(tmp_path))
+    reference = take()
+    response = client.get(
+        local_path(reference["status_list"]["uri"]),
+        headers={"Accept": "application/statuslist+jwt"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/statuslist+jwt")

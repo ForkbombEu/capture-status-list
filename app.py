@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import jwt
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -15,6 +15,7 @@ from issuer import (
     generate_current_status_list_token,
     get_credential_record,
     list_credential_records,
+    list_version,
     public_jwks,
     reset_state,
     revoke_credential_record,
@@ -40,6 +41,7 @@ from models import (
 )
 from status_list import (
     STATUS_INVALID,
+    TOKEN_TTL_SECONDS,
     InvalidStatusListIndex,
     base64url_decode,
     status_label,
@@ -167,10 +169,36 @@ def revoke_batch(request: CredentialIdsRequest) -> RevokeBatchResponse:
     return RevokeBatchResponse(revoked=revoked, errors=errors)
 
 
+def _status_list_etag() -> str:
+    return f'W/"{list_version()}"'
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    candidates = [tag.strip() for tag in if_none_match.split(",")]
+    bare = etag.removeprefix("W/")
+    return "*" in candidates or etag in candidates or bare in candidates
+
+
 @app.get("/status/1", response_class=PlainTextResponse)
-def status_list_token() -> PlainTextResponse:
+def status_list_token(request: Request) -> PlainTextResponse:
+    """Serve the signed Status List Token with weak-ETag revalidation.
+
+    ``max-age = ttl`` mirrors the German national wallet backend: verifiers
+    cache the token for its validity window and revalidate via
+    ``If-None-Match``, so a revocation propagates within one ttl.
+    """
+    etag = _status_list_etag()
+    headers = {
+        "Cache-Control": f"max-age={TOKEN_TTL_SECONDS}",
+        "ETag": etag,
+    }
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and _etag_matches(if_none_match, etag):
+        return PlainTextResponse(b"", status_code=304, headers=headers)
     token = generate_current_status_list_token()
-    return PlainTextResponse(token, media_type="application/statuslist+jwt")
+    return PlainTextResponse(
+        token, media_type="application/statuslist+jwt", headers=headers
+    )
 
 
 @app.get("/.well-known/jwks.json")

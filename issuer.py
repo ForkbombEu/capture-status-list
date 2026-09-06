@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from status_list import (
     DEFAULT_STATUS_LIST_SIZE,
     STATUS_INVALID,
     STATUS_VALID,
+    IndexScatter,
     InvalidStatusListIndex,
     generate_status_list_token,
     status_label,
@@ -22,7 +24,7 @@ from status_list import (
 ISSUER = "http://localhost:8000"
 STATUS_LIST_URI = f"{ISSUER}/status/1"
 KEY_ID = "mock-eudi-status-list-1"
-AUTO_INDEX_START = 42
+INDEX_CURSOR_START = 42
 KEYS_DIR = Path(__file__).resolve().parent / "keys"
 PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
 PUBLIC_KEY_PATH = KEYS_DIR / "public.pem"
@@ -123,7 +125,11 @@ class InMemoryIssuer:
     def reset(self) -> None:
         self.statuses = [STATUS_VALID] * DEFAULT_STATUS_LIST_SIZE
         self.credentials: dict[str, CredentialRecord] = {}
-        self.next_idx = AUTO_INDEX_START
+        self._cursor = INDEX_CURSOR_START
+        self._scatter = IndexScatter(
+            DEFAULT_STATUS_LIST_SIZE, seed=secrets.token_bytes(32)
+        )
+        self.version = 0
 
     def create_credential(
         self,
@@ -138,8 +144,6 @@ class InMemoryIssuer:
 
         record = CredentialRecord(credential_id=credential_id, idx=assigned_idx)
         self.credentials[credential_id] = record
-        if assigned_idx >= self.next_idx:
-            self.next_idx = assigned_idx + 1
         return CredentialResponse(
             credential_id=record.credential_id,
             idx=record.idx,
@@ -150,6 +154,7 @@ class InMemoryIssuer:
     def revoke_credential(self, credential_id: str) -> RevokeResponse:
         record = self.get_credential(credential_id)
         self.statuses[record.idx] = STATUS_INVALID
+        self.version += 1
         return RevokeResponse(
             credential_id=record.credential_id,
             idx=record.idx,
@@ -177,12 +182,15 @@ class InMemoryIssuer:
             bits=DEFAULT_BITS,
         )
 
+
     def _next_unused_idx(self) -> int:
         used = {record.idx for record in self.credentials.values()}
-        idx = self.next_idx
-        while idx in used:
-            idx += 1
-        return idx
+        while True:
+            idx = self._scatter.permute(self._cursor)
+            self._cursor += 1
+            if idx not in used:
+                return idx
+
 
     def _validate_unused_idx(self, idx: int) -> None:
         if idx < 0 or idx >= len(self.statuses):
@@ -228,6 +236,10 @@ def debug_status_at(idx: int) -> str:
 
 def generate_current_status_list_token() -> str:
     return issuer_state.status_list_token(key_store.private_pem())
+
+
+def list_version() -> int:
+    return issuer_state.version
 
 
 def public_jwks() -> dict[str, list[dict[str, str]]]:

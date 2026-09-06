@@ -37,14 +37,16 @@ def test_random_batch_create_lists_credentials() -> None:
     assert response.status_code == 200
     created = response.json()["created"]
     assert len(created) == 3
-    assert [credential["idx"] for credential in created] == [42, 43, 44]
+    created_idx = sorted(credential["idx"] for credential in created)
+    assert len(set(created_idx)) == 3
+    assert all(0 <= idx < 10_000 for idx in created_idx)
     assert all(
         credential["credential_id"].startswith("demo-") for credential in created
     )
 
     listed = client.get("/credentials").json()["credentials"]
 
-    assert [credential["idx"] for credential in listed] == [42, 43, 44]
+    assert [credential["idx"] for credential in listed] == created_idx
     assert {credential["status"] for credential in listed} == {"VALID"}
 
 

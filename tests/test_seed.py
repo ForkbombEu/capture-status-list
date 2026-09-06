@@ -31,9 +31,6 @@ def test_seed_server_creates_revokes_and_verifies_demo_data() -> None:
     listed = client.get("/credentials").json()["credentials"]
 
     assert len(listed) == 8
-    assert [credential["status"] for credential in listed[:3]] == [
-        "REVOKED",
-        "REVOKED",
-        "REVOKED",
-    ]
-    assert {credential["status"] for credential in listed[3:]} == {"VALID"}
+    statuses = [c["status"] for c in listed]
+    assert statuses.count("REVOKED") == 3
+    assert statuses.count("VALID") == 5

@@ -873,10 +873,15 @@ _CONSOLE_SCRIPT = """<script>
       bitmap.innerHTML = html;
       minimap.innerHTML = `<div class="bitmap-minimap-viewport" aria-hidden="true"></div>` +
         (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
+      const totalRows = Math.ceil(full.length / width);
       minimap.querySelectorAll("button[data-row]").forEach((marker) => {
-        marker.onclick = () => {
-          const row = bitmap.querySelector(`.bitmap-row[data-row="${marker.dataset.row}"]`);
-          if (row) bitmapScroll.scrollTop = row.offsetTop - bitmapScroll.clientHeight / 2;
+        marker.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const rowNumber = Number(marker.dataset.row);
+          const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+          const target = totalRows <= 1 ? 0 : rowNumber / (totalRows - 1) * maxScroll;
+          bitmapScroll.scrollTo({ top: target, behavior: "auto" });
         };
       });
       const viewport = minimap.querySelector(".bitmap-minimap-viewport");

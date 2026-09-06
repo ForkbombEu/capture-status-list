@@ -151,8 +151,11 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
     assert lst["chars_per_entry"] == 1
     assert lst["window_size"] == 256
     assert len(lst["window"]) == 256
+    assert len(lst["full"]) == 10000
     start = lst["window_start"]
     assert start == 0
+    assert lst["full"][revoked["idx"]] == "1"
+    assert lst["full"][valid["idx"]] == "0"
     assert lst["window"][revoked["idx"] - start] == "1"
     assert lst["window"][valid["idx"] - start] == "0"
     assert set(lst["window"]) == {"0", "1"}

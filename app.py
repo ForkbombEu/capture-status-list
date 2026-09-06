@@ -461,6 +461,7 @@ def _status_list_bits(
     contain the assigned indices when there are any.
     """
     chars_per_entry = 2 if bits == 8 else 1
+    full = "".join(format(value, "x").rjust(chars_per_entry, "0") for value in statuses)
     first = min(around) if around else 0
     start = max(0, (first // 64) * 64)
     start = min(start, max(0, len(statuses) - STATUS_BITS_WINDOW))
@@ -476,6 +477,7 @@ def _status_list_bits(
         window="".join(
             format(value, "x").rjust(chars_per_entry, "0") for value in window_values
         ),
+        full=full,
     )
 
 

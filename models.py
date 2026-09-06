@@ -99,6 +99,7 @@ class StatusListBits(BaseModel):
     window_start: int
     window_size: int
     window: str
+    full: str
 
 
 class StatusListDebugResponse(BaseModel):

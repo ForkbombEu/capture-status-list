@@ -205,6 +205,62 @@ APP_CSS = """
     }
     .decoded-grid > * { min-width: 0; }
     .decoded-grid pre { max-height: 320px; overflow: auto; }
+    .bitmap-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .bitmap-scroll,
+    .bitmap-minimap-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-muted);
+    }
+    .bitmap-scroll:focus-visible,
+    .bitmap-minimap-scroll:focus-visible {
+      outline: 3px solid var(--brand-accent);
+      outline-offset: 2px;
+    }
+    .bitmap-minimap {
+      min-height: 420px;
+      padding: var(--space-2);
+      font-family: var(--font-mono);
+    }
+    .bitmap-minimap-line {
+      display: flex;
+      align-items: center;
+      height: 24px;
+    }
+    .bitmap-minimap-marker {
+      width: 100%;
+      height: 16px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--destructive);
+      cursor: pointer;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .bitmap-minimap-marker:hover,
+    .bitmap-minimap-marker:focus-visible {
+      background: var(--destructive-bg);
+      outline: 2px solid var(--destructive);
+      outline-offset: 1px;
+    }
+    .bitmap-minimap-empty {
+      display: block;
+      padding: var(--space-2) 0;
+      color: var(--fg-muted);
+      font-size: var(--fs-xs);
+      line-height: 1.2;
+      text-align: center;
+      writing-mode: vertical-rl;
+    }
     /* Inflated `lst`: one character per entry, 64 per row, with the row's
        first index in the gutter. */
     .bitmap {
@@ -536,8 +592,15 @@ _CONSOLE_BODY = """  <header class="hero">
             <span class="eyebrow">Revoked</span>
           </div>
         </div>
-        <p class="eyebrow mt-4">Inflated lst</p>
-        <div class="bitmap" id="lst-bitmap"></div>
+        <p class="eyebrow mt-4">Inflated lst spectrum</p>
+        <div class="bitmap-shell">
+          <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
+            <div class="bitmap" id="lst-bitmap"></div>
+          </div>
+          <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
+            <div class="bitmap-minimap" id="lst-minimap"></div>
+          </div>
+        </div>
         <p class="bitmap-caption" id="lst-caption"></p>
         <p class="eyebrow mt-4">Revoked indices</p>
         <p class="index-list" id="lst-indices">None</p>
@@ -684,6 +747,7 @@ _CONSOLE_SCRIPT = """<script>
       });
       write(data);
       await load();
+      await refreshToken(true);
     };
 
     document.querySelector("#revoke").onclick = async () => {
@@ -695,7 +759,7 @@ _CONSOLE_SCRIPT = """<script>
       });
       write(data);
       await load();
-      await refreshToken();
+      await refreshToken(true);
     };
 
     document.querySelector("#verify").onclick = async () => {
@@ -705,7 +769,6 @@ _CONSOLE_SCRIPT = """<script>
         method: "POST",
         body: JSON.stringify({ credential_ids: ids }),
       });
-      verification = Object.fromEntries(data.verified.map((item) => [item.credential_id, item]));
       write(data);
       render();
     };
@@ -737,28 +800,55 @@ _CONSOLE_SCRIPT = """<script>
 
     // One character per entry (two when bits is 8), 64 entries to a row, with
     // every non-zero — that is, revoked — entry marked.
-    function renderBitmap(lst) {
+    function renderBitmap(lst, revokedIndices) {
+      const bitmapScroll = document.querySelector("#lst-bitmap-scroll");
       const bitmap = document.querySelector("#lst-bitmap");
+      const minimapScroll = document.querySelector("#lst-minimap-scroll");
+      const minimap = document.querySelector("#lst-minimap");
+      const full = lst.full || lst.window;
       const width = ROW_ENTRIES * lst.chars_per_entry;
       let html = "";
+      let minimapHtml = "";
 
-      for (let offset = 0; offset < lst.window.length; offset += width) {
-        const row = lst.window.slice(offset, offset + width);
-        const index = lst.window_start + offset / lst.chars_per_entry;
+      for (let offset = 0, rowNumber = 0; offset < full.length; offset += width, rowNumber += 1) {
+        const row = full.slice(offset, offset + width);
+        const index = offset / lst.chars_per_entry;
+        const rowRevoked = revokedIndices.filter((entry) => entry >= index && entry < index + row.length / lst.chars_per_entry);
         const marked = [...row]
           .map((char, position) => {
             const spacer = position > 0 && position % (8 * lst.chars_per_entry) === 0 ? " " : "";
             return spacer + (char === "0" ? char : `<b>${escapeHtml(char)}</b>`);
           })
           .join("");
-        html += `<span class="bitmap-index">${index}</span><span class="bitmap-row">${marked}</span>`;
+        html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
+        const marker = rowRevoked.length
+          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}">●</button>`
+          : "";
+        minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
       }
 
       bitmap.innerHTML = html;
-      const last = lst.window_start + lst.window_size - 1;
+      minimap.innerHTML = minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`;
+      minimap.querySelectorAll(".bitmap-minimap-marker").forEach((marker) => {
+        marker.onclick = () => {
+          const row = bitmap.querySelector(`.bitmap-row[data-row="${marker.dataset.row}"]`);
+          if (row) bitmapScroll.scrollTop = row.offsetTop - bitmapScroll.clientHeight / 2;
+        };
+      });
+      const syncMinimap = () => {
+        const bitmapMax = Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        const minimapMax = Math.max(1, minimapScroll.scrollHeight - minimapScroll.clientHeight);
+        minimapScroll.scrollTop = bitmapScroll.scrollTop / bitmapMax * minimapMax;
+      };
+      bitmapScroll.onscroll = syncMinimap;
+      minimapScroll.onscroll = () => {
+        const bitmapMax = Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        const minimapMax = Math.max(1, minimapScroll.scrollHeight - minimapScroll.clientHeight);
+        bitmapScroll.scrollTop = minimapScroll.scrollTop / minimapMax * bitmapMax;
+      };
+      const last = lst.entries - 1;
       document.querySelector("#lst-caption").textContent =
-        `Entries ${lst.window_start} to ${last} of ${lst.entries}. ` +
-        `0 is valid, 1 is revoked.`;
+        `Entries 0 to ${last} of ${lst.entries}. Red markers are revoked entries; click a minimap marker to jump there.`;
     }
 
     function renderDecodedToken(data) {
@@ -771,8 +861,7 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
       document.querySelector("#lst-revoked").textContent = data.revoked;
-
-      renderBitmap(data.lst);
+      renderBitmap(data.lst, data.revoked_indices);
       document.querySelector("#lst-note").textContent =
         `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
         `${data.lst.inflated_bytes} bytes holding ${data.lst.entries} entries at ` +
@@ -811,26 +900,18 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-
-    // A revoke or a reset changes the list the token encodes, so the decoded
-    // view is refreshed whenever it is already on screen.
-    async function refreshToken() {
-      if (tokenCard.hidden) return;
+    // Mutations change the list payload; always fetch a fresh decoded view.
+    async function refreshToken(force = false) {
+      if (tokenCard.hidden && !force) return;
       renderDecodedToken(await jsonFetch("/debug/status-list"));
     }
 
-    document.querySelector("#token").onclick = async () => {
-      const data = await jsonFetch("/debug/status-list");
-      renderDecodedToken(data);
-      write("Status list token fetched. The decoded token, status list and signing key are shown above the output.");
-      tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
     document.querySelector("#reset").onclick = async () => {
       const data = await jsonFetch("/reset", { method: "POST" });
       verification = {};
       write(data);
       await load();
-      await refreshToken();
+      await refreshToken(true);
     };
 
     load().catch(write);

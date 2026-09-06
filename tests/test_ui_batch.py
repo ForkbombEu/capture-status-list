@@ -28,6 +28,9 @@ def test_console_is_served_at_the_root() -> None:
     assert 'id="country"' in response.text
     assert 'id="doctype"' in response.text
     assert 'id="expiry-date"' in response.text
+    assert 'id="lst-bitmap-scroll"' in response.text
+    assert 'id="lst-minimap"' in response.text
+    assert 'bitmap-minimap-marker' in response.text
 
 
 def test_red_route_is_gone() -> None:

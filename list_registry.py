@@ -71,14 +71,33 @@ class StatusListRegistry:
         self.size = size
         self._current: dict[tuple[str, str], ListState] = {}
         self._lists: dict[tuple[str, str, UUID], ListState] = {}
+        self._allocation_replays: dict[tuple[str, str, str], tuple[str, ListReference]] = {}
 
     def reset(self) -> None:
         self._current.clear()
         self._lists.clear()
+        self._allocation_replays.clear()
 
-    def take(self, country: str, doctype: str, expiry_date: str) -> ListReference:
+    def take(
+        self,
+        country: str,
+        doctype: str,
+        expiry_date: str,
+        allocation_id: str | None = None,
+    ) -> ListReference:
         self._validate_components(country, doctype)
         expiry = self._parse_expiry(expiry_date)
+        if allocation_id is not None:
+            if not allocation_id:
+                raise ValueError("allocation_id must not be empty")
+            replay_key = (country, doctype, allocation_id)
+            replay = self._allocation_replays.get(replay_key)
+            if replay is not None:
+                replay_expiry, reference = replay
+                if replay_expiry != expiry_date:
+                    raise ValueError("allocation_id was already used with different parameters")
+                return reference
+
         key = (country, doctype)
         state = self._current.get(key)
         if state is None or state.cursor >= state.size:
@@ -88,12 +107,19 @@ class StatusListRegistry:
         cursor = state.cursor
         state.cursor += 1
         idx = state.scatter.permute(cursor)
-        return ListReference(
+        reference = ListReference(
             status_list_uri=state.token_uri(self.base_url),
             identifier_list_uri=state.identifier_uri(self.base_url),
             idx=idx,
             list_id=state.list_id,
         )
+        if allocation_id is not None:
+            self._allocation_replays[(country, doctype, allocation_id)] = (
+                expiry_date,
+                reference,
+            )
+        return reference
+
 
     def get_by_uri(self, uri: str) -> tuple[str, ListState]:
         kind, country, doctype, list_id = self.parse_uri(uri)

@@ -226,7 +226,7 @@ async def take_status_list(request: Request) -> dict:
     form = await _reference_form(request)
     try:
         reference = take_eudi_reference(
-            form["country"], form["doctype"], form["expiry_date"]
+            form["country"], form["doctype"], form["expiry_date"], form.get("allocation_id")
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

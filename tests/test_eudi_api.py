@@ -42,6 +42,45 @@ def test_take_creates_paired_country_doctype_references() -> None:
     assert "/identifier_list/EU/org.iso.18013.5.1.mDL/" in reference["identifier_list"]["uri"]
     assert reference["identifier_list"]["id"] == str(reference["status_list"]["idx"])
 
+def test_take_replays_same_allocation_id_without_consuming_an_index() -> None:
+    first = client.post(
+        "/token_status_list/take",
+        headers={"X-Api-Key": "test"},
+        data={
+            "country": "EU",
+            "doctype": "urn:eudi:pid:1",
+            "expiry_date": "2099-12-31",
+            "allocation_id": "retry-1",
+        },
+    )
+    replay = client.post(
+        "/token_status_list/take",
+        headers={"X-Api-Key": "test"},
+        data={
+            "country": "EU",
+            "doctype": "urn:eudi:pid:1",
+            "expiry_date": "2099-12-31",
+            "allocation_id": "retry-1",
+        },
+    )
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert replay.json() == first.json()
+    assert client.get("/debug/status-lists").json()[0]["allocated"] == 1
+
+    conflict = client.post(
+        "/token_status_list/take",
+        headers={"X-Api-Key": "test"},
+        data={
+            "country": "EU",
+            "doctype": "urn:eudi:pid:1",
+            "expiry_date": "2030-01-01",
+            "allocation_id": "retry-1",
+        },
+    )
+    assert conflict.status_code == 400
+    assert "different parameters" in conflict.json()["detail"]
 
 def test_status_list_jwt_and_cwt_share_the_same_list() -> None:
     reference = take()

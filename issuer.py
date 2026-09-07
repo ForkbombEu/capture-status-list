@@ -296,8 +296,13 @@ def reset_state() -> None:
     eudi_registry.reset()
 
 
-def take_eudi_reference(country: str, doctype: str, expiry_date: str):
-    return eudi_registry.take(country, doctype, expiry_date)
+def take_eudi_reference(
+    country: str,
+    doctype: str,
+    expiry_date: str,
+    allocation_id: str | None = None,
+):
+    return eudi_registry.take(country, doctype, expiry_date, allocation_id)
 
 
 def eudi_status_at(uri: str, idx: int) -> int:

@@ -32,7 +32,9 @@ from status_list import (
 )
 
 
-ISSUER = "http://localhost:8000"
+ISSUER = (
+    os.environ.get("STATUS_LIST_PUBLIC_URL") or "http://localhost:8000"
+).rstrip("/")
 STATUS_LIST_URI = f"{ISSUER}/status/1"
 KEY_ID = "mock-eudi-status-list-1"
 INDEX_CURSOR_START = 42

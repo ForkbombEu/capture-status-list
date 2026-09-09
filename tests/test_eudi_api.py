@@ -1,3 +1,7 @@
+import json
+import os
+import subprocess
+import sys
 from urllib.parse import urlparse
 
 import jwt
@@ -41,6 +45,49 @@ def test_take_creates_paired_country_doctype_references() -> None:
     assert "/token_status_list/EU/org.iso.18013.5.1.mDL/" in reference["status_list"]["uri"]
     assert "/identifier_list/EU/org.iso.18013.5.1.mDL/" in reference["identifier_list"]["uri"]
     assert reference["identifier_list"]["id"] == str(reference["status_list"]["idx"])
+
+
+def test_take_uses_configured_public_url() -> None:
+    script = '''
+import json
+from fastapi.testclient import TestClient
+from app import app
+from urllib.parse import urlparse
+
+client = TestClient(app)
+response = client.post(
+    "/token_status_list/take",
+    headers={"X-Api-Key": "test"},
+    data={
+        "country": "EU",
+        "doctype": "org.iso.18013.5.1.mDL",
+        "expiry_date": "2099-12-31",
+    },
+)
+reference = response.json()
+path = urlparse(reference["status_list"]["uri"]).path
+print(json.dumps({"reference": reference, "status_code": client.get(path).status_code}))
+'''
+    environment = os.environ | {
+        "STATUS_LIST_PUBLIC_URL": "https://status.example.test/"
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+    output = json.loads(result.stdout)
+    reference = output["reference"]
+
+    assert reference["status_list"]["uri"].startswith(
+        "https://status.example.test/token_status_list/"
+    )
+    assert reference["identifier_list"]["uri"].startswith(
+        "https://status.example.test/identifier_list/"
+    )
+    assert output["status_code"] == 200
 
 
 def test_status_list_jwt_and_cwt_share_the_same_list() -> None:

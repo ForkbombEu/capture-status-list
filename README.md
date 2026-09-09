@@ -106,6 +106,17 @@ restarts. Run without the volume for ephemeral local testing:
 docker run --rm -p 8000:8000 capture-status-list
 ```
 
+When the service is behind a TLS-terminating reverse proxy, set
+`STATUS_LIST_PUBLIC_URL` to its public origin. The value is used in returned
+status-list references and signed token claims, so it must be the externally
+reachable HTTPS URL without a path:
+
+```sh
+docker run --rm -p 8000:8000 \
+  -e STATUS_LIST_PUBLIC_URL=https://status.example.com \
+  capture-status-list
+```
+
 `mise` is a host development tool and is intentionally not installed in the
 minimal Python runtime image. When seeding from the host while the container
 is running, use:

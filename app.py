@@ -261,7 +261,7 @@ def _serve_reference_list(uri: str, request: Request, kind: str) -> Response:
 @app.get("/token_status_list/{country}/{doctype}/{list_id}")
 def serve_status_list(country: str, doctype: str, list_id: str, request: Request) -> Response:
     return _serve_reference_list(
-        f"http://localhost:8000/token_status_list/{country}/{doctype}/{list_id}",
+        f"{eudi_registry.base_url}/token_status_list/{country}/{doctype}/{list_id}",
         request,
         "statuslist",
     )
@@ -270,7 +270,7 @@ def serve_status_list(country: str, doctype: str, list_id: str, request: Request
 @app.get("/identifier_list/{country}/{doctype}/{list_id}")
 def serve_identifier_list(country: str, doctype: str, list_id: str, request: Request) -> Response:
     return _serve_reference_list(
-        f"http://localhost:8000/identifier_list/{country}/{doctype}/{list_id}",
+        f"{eudi_registry.base_url}/identifier_list/{country}/{doctype}/{list_id}",
         request,
         "identifierlist",
     )

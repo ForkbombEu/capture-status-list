@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app import app
 from cwt_codec import decode_cwt
 from issuer import public_key_pem, reset_eudi_registry, reset_state
+from verifier import check_status
 
 
 client = TestClient(app)
@@ -187,3 +188,30 @@ def test_pooled_tokens_fall_back_to_local_test_key(tmp_path, monkeypatch) -> Non
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/statuslist+jwt")
+
+
+
+def test_local_mode_tokens_carry_x5c_and_verify_end_to_end(monkeypatch) -> None:
+    monkeypatch.delenv("EUDI_KEY_DIR", raising=False)
+    reference = take()
+    uri = reference["status_list"]["uri"]
+    idx = reference["status_list"]["idx"]
+
+    token = client.get(
+        local_path(uri), headers={"Accept": "application/statuslist+jwt"}
+    ).text
+    header = jwt.get_unverified_header(token)
+    assert header["kid"] == "EU-status-list"
+    assert header["x5c"]
+
+    assert check_status(idx, token, expected_subject=uri) == "VALID"
+
+    client.post(
+        "/token_status_list/set",
+        headers={"X-Api-Key": "test"},
+        data={"uri": uri, "idx": str(idx), "status": "1"},
+    )
+    revoked = client.get(
+        local_path(uri), headers={"Accept": "application/statuslist+jwt"}
+    ).text
+    assert check_status(idx, revoked, expected_subject=uri) == "REVOKED"

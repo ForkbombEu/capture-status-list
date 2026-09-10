@@ -27,6 +27,7 @@ config/secrets.*
 *.pfx
 *.crt
 *.cer
+*.der
 *.csr
 *.jks
 *.keystore

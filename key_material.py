@@ -1,9 +1,10 @@
 """Country-aware signing key and certificate configuration.
 
-The module only describes and reads signing material supplied by the operator.  It
-never generates, copies, or otherwise modifies key files.  A country-specific
-pair takes precedence over the legacy ``private.pem``/``certificate.der`` pair
-in the configured key directory.
+With ``EUDI_KEY_DIR`` set, the module only describes and reads signing material
+supplied by the operator and never generates, copies, or modifies key files.
+Without it, local test mode generates a key and a matching self-signed
+certificate on first use, so every country list token carries an ``x5c``
+header without operator setup.
 """
 
 from __future__ import annotations
@@ -11,7 +12,13 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 
 _DEFAULT_KEY_DIR = "keys"
@@ -55,14 +62,48 @@ def _key_dir() -> Path:
     return Path(configured or _DEFAULT_KEY_DIR).expanduser()
 
 
-def _existing_or_primary(primary: Path, legacy: Path) -> Path:
-    if primary.is_file():
-        return primary
-    if legacy.is_file():
-        return legacy
-    # Retain the country-specific path in the configuration when no material
-    # exists yet; loading it then gives the caller the normal FileNotFoundError.
-    return primary
+def _load_or_create_local_key(key_dir: Path) -> Path:
+    """Return the local test signing key, generating a PKCS8 ES256 key on first use."""
+
+    private_path = key_dir / "private.pem"
+    if private_path.is_file():
+        return private_path
+    key_dir.mkdir(parents=True, exist_ok=True)
+    key = ec.generate_private_key(ec.SECP256R1())
+    private_path.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    os.chmod(private_path, 0o600)
+    return private_path
+
+
+def _ensure_local_certificate(key_dir: Path, private_path: Path) -> Path:
+    """Return a self-signed certificate for the local test key on first use."""
+
+    certificate_path = key_dir / "certificate.der"
+    if certificate_path.is_file():
+        return certificate_path
+    key = serialization.load_pem_private_key(private_path.read_bytes(), password=None)
+    subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "Mock EUDI Status List")]
+    )
+    now = datetime.now(timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365 * 10))
+        .sign(key, hashes.SHA256())
+    )
+    certificate_path.write_bytes(certificate.public_bytes(serialization.Encoding.DER))
+    return certificate_path
 
 
 @dataclass(frozen=True)
@@ -106,31 +147,43 @@ class CountryKeyMaterial:
 
 
 def material_for(country: str) -> CountryKeyMaterial:
-    """Resolve operator-supplied country signing material from ``EUDI_KEY_DIR``.
+    """Resolve signing material for a country.
 
-    Supports both the local ``<country>.key.pem`` convention and the filename
-    layout used by the European reference service. Missing certificates remain
-    valid for local JWT/CWT debugging; no key files are generated or copied.
+    With ``EUDI_KEY_DIR`` set, operator-supplied files are authoritative and
+    are never modified: ``<country>.key.pem`` / ``<country>.cert.der``, the
+    European reference filenames, then the legacy ``private.pem`` /
+    ``certificate.der`` pair. Without it, local test mode generates a key and
+    a matching self-signed certificate on first use so every token carries an
+    ``x5c`` header.
     """
     country = _validate_country(country)
     key_dir = _key_dir()
-    reference_key, reference_cert = _REFERENCE_FILENAMES.get(country, (None, None))
-    key_candidates = [
-        key_dir / f"{country}.key.pem",
-        key_dir / reference_key if reference_key else key_dir / "__missing__",
-        key_dir / "private.pem",
-    ]
-    private_path = next(
-        (path for path in key_candidates if path.is_file()), key_candidates[0]
-    )
-    certificate_candidates = [
-        key_dir / f"{country}.cert.der",
-        key_dir / reference_cert if reference_cert else key_dir / "__missing__",
-        key_dir / "certificate.der",
-    ]
-    certificate_path = next(
-        (path for path in certificate_candidates if path.is_file()), None
-    )
+    if os.environ.get("EUDI_KEY_DIR"):
+        reference_key, reference_cert = _REFERENCE_FILENAMES.get(country, (None, None))
+        key_candidates = [
+            key_dir / f"{country}.key.pem",
+            key_dir / reference_key if reference_key else key_dir / "__missing__",
+            key_dir / "private.pem",
+        ]
+        private_path = next(
+            (path for path in key_candidates if path.is_file()), key_candidates[0]
+        )
+        certificate_candidates = [
+            key_dir / f"{country}.cert.der",
+            key_dir / reference_cert if reference_cert else key_dir / "__missing__",
+            key_dir / "certificate.der",
+        ]
+        certificate_path = next(
+            (path for path in certificate_candidates if path.is_file()), None
+        )
+        return CountryKeyMaterial(
+            country=country,
+            private_key_path=private_path,
+            certificate_path=certificate_path,
+            kid=country_kid(country),
+        )
+    private_path = _load_or_create_local_key(key_dir)
+    certificate_path = _ensure_local_certificate(key_dir, private_path)
     return CountryKeyMaterial(
         country=country,
         private_key_path=private_path,

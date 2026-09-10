@@ -75,21 +75,24 @@ doctypes, active and expired pools, revoked and non-revoked credentials, and a
 mix of verified and not-yet-verified rows. Use `mise run seed -- --simple` for
 the original single-pool fixture.
 The app reads operator-supplied country signing material without generating or
-copying secrets. Set `EUDI_KEY_DIR` to the mounted key directory. It accepts
+copying secrets. Set `EUDI_KEY_DIR` to the mounted key directory; it accepts
 `<country>.key.pem` / `<country>.cert.der`, the European reference filenames
 (`PID-DS-0001_<country>.pem` and matching `_cert.der`, plus the AV filenames),
 or the local fallback `private.pem` / `certificate.der`. The certificate is
-optional for local debugging; when present it is emitted in JWT `x5c` and CWT
-COSE header label 33.
+emitted in JWT `x5c` and CWT COSE header label 33, and the verifier resolves
+the signing key from `x5c`, so operator material needs no JWKS registration.
 
-The legacy local signer still generates a test key on first use:
+Without `EUDI_KEY_DIR`, local test mode generates a test key and a matching
+self-signed certificate on first use:
 
 ```text
 keys/private.pem
-keys/public.pem
+keys/certificate.der
 ```
 
-These files are local test material and are ignored by git.
+The self-signed certificate makes every country list self-describing (`x5c`),
+so the console verifier works out of the box. These files are local test
+material and are ignored by git.
 
 ## Deploy (Docker)
 

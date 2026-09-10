@@ -58,3 +58,8 @@ If unsure:
 - location: `PURIA.md` "Design Source"; `.puria/design/DESIGN.md`
 - evidence: `PURIA.md` requires "thick, explicit borders", "hard offset shadows", "square or near-square corners"; `.puria/design/DESIGN.md` §7 requires a 6px canonical radius and "almost flat" elevation, and §15 forbids shadows on cards by default.
 - rationale: Both documents are declared authoritative for design. The UI follows `.puria/design/DESIGN.md`, because `PURIA.md` names `.puria/design/DESIGN.md` the source of truth for design when present, and because this repository is a Credimi Extra whose brand is set by the `credimi-extras-template` repository. A human must decide whether `PURIA.md` keeps the neubrutalist clause for Credimi Extras repositories.
+- id: hitl-0002
+- observation: `PURIA.md` requires formatting through a repository-defined formatter before every commit, but `mise.toml` only defines `gofmt` for Go. The repository's active codebase is Python, and no Python formatter (e.g., black, ruff format) task is defined.
+- location: `mise.toml` `[tasks.format]`; `PURIA.md` "Git Behavior" pre-commit validation
+- evidence: `mise.toml` format task is `gofmt -w .` only; CI (`ci.yml`) runs `mise run fix` (Go) but no Python format/lint step; pytest is the only Python validation.
+- rationale: Python commits cannot satisfy the "run the repository-defined formatter" requirement as written. A human should decide whether to add a Python formatter task (e.g., `ruff format` / `black`) to `mise.toml` and CI.

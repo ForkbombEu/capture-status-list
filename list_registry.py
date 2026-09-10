@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
-from status_list import DEFAULT_STATUS_LIST_SIZE, IndexScatter, STATUS_VALID
+from status_list import DEFAULT_STATUS_LIST_SIZE, IndexScatter, STATUS_VALID, status_label
 
 
 TOKEN_LIST_KIND = "token_status_list"
@@ -23,6 +23,7 @@ class ListState:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     seed: bytes = field(default_factory=lambda: uuid4().bytes + uuid4().bytes)
     cursor: int = 0
+    allocated_expiries: list[date] = field(default_factory=list)
     version: int = 0
 
     @property
@@ -63,6 +64,17 @@ class ListSummary:
     current: bool
 
 
+@dataclass(frozen=True)
+class AllocatedEntry:
+    country: str
+    doctype: str
+    status_list_uri: str
+    identifier_list_uri: str
+    idx: int
+    expiry_date: str
+    status: str
+
+
 class StatusListRegistry:
     def __init__(self, base_url: str, size: int = DEFAULT_STATUS_LIST_SIZE) -> None:
         if size < 1:
@@ -87,6 +99,7 @@ class StatusListRegistry:
         state.issued_expiry = max(state.issued_expiry or expiry, expiry)
         cursor = state.cursor
         state.cursor += 1
+        state.allocated_expiries.append(expiry)
         idx = state.scatter.permute(cursor)
         return ListReference(
             status_list_uri=state.token_uri(self.base_url),
@@ -151,6 +164,24 @@ class StatusListRegistry:
                 )
             )
         return result
+
+    def allocated_entries(self) -> list[AllocatedEntry]:
+        entries: list[AllocatedEntry] = []
+        for _, state in sorted(self._lists.items(), key=lambda item: str(item[0])):
+            for cursor, expiry in enumerate(state.allocated_expiries):
+                idx = state.scatter.permute(cursor)
+                entries.append(
+                    AllocatedEntry(
+                        country=state.country,
+                        doctype=state.doctype,
+                        status_list_uri=state.token_uri(self.base_url),
+                        identifier_list_uri=state.identifier_uri(self.base_url),
+                        idx=idx,
+                        expiry_date=expiry.isoformat(),
+                        status=status_label(state.statuses[idx]),
+                    )
+                )
+        return entries
 
     def parse_uri(self, uri: str) -> tuple[str, str, str, UUID]:
         prefix = self.base_url + "/"

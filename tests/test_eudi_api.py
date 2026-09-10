@@ -48,6 +48,37 @@ def test_take_creates_paired_country_doctype_references() -> None:
     assert reference["identifier_list"]["id"] == str(reference["status_list"]["idx"])
 
 
+def test_take_is_documented_as_an_api_key_protected_form_operation() -> None:
+    operation = client.get("/openapi.json").json()["paths"]["/token_status_list/take"]["post"]
+
+    assert operation["security"] == [{"ApiKeyAuth": []}]
+    assert operation["requestBody"]["required"] is True
+    schema = operation["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]
+    assert schema["required"] == ["country", "doctype", "expiry_date"]
+    assert set(schema["properties"]) == {"country", "doctype", "expiry_date"}
+
+    security_scheme = client.get("/openapi.json").json()["components"]["securitySchemes"]["ApiKeyAuth"]
+    assert security_scheme == {"type": "apiKey", "in": "header", "name": "X-Api-Key"}
+
+
+def test_take_exposes_allocated_entries_in_the_credentials_data() -> None:
+    reference = take()
+
+    allocations = client.get("/credentials").json()["allocated_entries"]
+
+    assert allocations == [
+        {
+            "country": "EU",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "status_list_uri": reference["status_list"]["uri"],
+            "identifier_list_uri": reference["identifier_list"]["uri"],
+            "idx": reference["status_list"]["idx"],
+            "expiry_date": "2099-12-31",
+            "status": "VALID",
+        }
+    ]
+
+
 def test_take_uses_configured_public_url() -> None:
     script = '''
 import json

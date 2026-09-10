@@ -33,8 +33,35 @@ class CredentialListItem(BaseModel):
     status: str
     verification_result: str | None = None
 
+
+class AllocatedStatusListEntry(BaseModel):
+    country: str
+    doctype: str
+    status_list_uri: str
+    identifier_list_uri: str
+    idx: int
+    expiry_date: str
+    status: str
+
+
 class CredentialListResponse(BaseModel):
     credentials: list[CredentialListItem]
+    allocated_entries: list[AllocatedStatusListEntry]
+
+
+class StatusListReference(BaseModel):
+    uri: str
+    idx: int
+
+
+class IdentifierListReference(BaseModel):
+    uri: str
+    id: str
+
+
+class StatusListTakeResponse(BaseModel):
+    status_list: StatusListReference
+    identifier_list: IdentifierListReference
 
 
 class RandomBatchCreateResponse(BaseModel):

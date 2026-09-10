@@ -314,6 +314,10 @@ def eudi_list_summaries():
     return eudi_registry.list_summaries()
 
 
+def eudi_allocated_entries():
+    return eudi_registry.allocated_entries()
+
+
 def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
     kind, state = eudi_registry.get_by_uri(uri)
     material = material_for(state.country)

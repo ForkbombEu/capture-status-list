@@ -8,7 +8,8 @@ from uuid import uuid4
 
 import jwt
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.security import APIKeyHeader
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +19,7 @@ from issuer import (
     create_credential_record,
     credential_verification_result,
     debug_status_at,
+    eudi_allocated_entries,
     eudi_list_summaries,
     eudi_registry,
     eudi_status_at,
@@ -35,6 +37,7 @@ from issuer import (
 )
 from models import (
     BatchError,
+    AllocatedStatusListEntry,
     CredentialIdsRequest,
     CredentialListItem,
     CredentialListResponse,
@@ -47,6 +50,7 @@ from models import (
     StatusListAssignment,
     StatusListBits,
     StatusListDebugResponse,
+    StatusListTakeResponse,
     RevokeBatchResponse,
     RevokeResponse,
     VerifyBatchResponse,
@@ -70,6 +74,10 @@ app = FastAPI(
     description="Minimal FCA test harness using an IETF Token Status List JWT.",
     docs_url=None,
     redoc_url=None,
+)
+
+reference_api_key = APIKeyHeader(
+    name="X-Api-Key", scheme_name="ApiKeyAuth", auto_error=False
 )
 
 # Runtime copies of the canonical Credimi brand assets. `fonts/` stays a
@@ -132,7 +140,11 @@ def list_credentials() -> CredentialListResponse:
                 verification_result=credential_verification_result(record.credential_id),
             )
             for record in list_credential_records()
-        ]
+        ],
+        allocated_entries=[
+            AllocatedStatusListEntry(**asdict(entry))
+            for entry in eudi_allocated_entries()
+        ],
     )
 
 
@@ -205,6 +217,11 @@ def _require_reference_key(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Incorrect API key")
 
 
+def _require_take_api_key(api_key: str | None = Security(reference_api_key)) -> None:
+    if api_key != os.environ.get("EUDI_API_KEY", "test"):
+        raise HTTPException(status_code=401, detail="Incorrect API key")
+
+
 def _reference_index(form: dict[str, str]) -> int:
     raw = form.get("id") or form.get("idx")
     if raw is None:
@@ -220,9 +237,42 @@ def _reference_format(request: Request, kind: str) -> str:
     return "cwt" if f"application/{kind}+cwt" in accept else "jwt"
 
 
-@app.post("/token_status_list/take")
-async def take_status_list(request: Request) -> dict:
-    _require_reference_key(request)
+@app.post(
+    "/token_status_list/take",
+    response_model=StatusListTakeResponse,
+    summary="Allocate status-list references",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["country", "doctype", "expiry_date"],
+                        "properties": {
+                            "country": {
+                                "type": "string",
+                                "description": "Issuing country for the credential.",
+                            },
+                            "doctype": {
+                                "type": "string",
+                                "description": "Document type for the credential.",
+                            },
+                            "expiry_date": {
+                                "type": "string",
+                                "format": "date",
+                                "description": "Credential expiry date in YYYY-MM-DD format.",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
+async def take_status_list(
+    request: Request, _: None = Depends(_require_take_api_key)
+) -> StatusListTakeResponse:
     form = await _reference_form(request)
     try:
         reference = take_eudi_reference(
@@ -230,13 +280,10 @@ async def take_status_list(request: Request) -> dict:
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {
-        "status_list": {"uri": reference.status_list_uri, "idx": reference.idx},
-        "identifier_list": {
-            "uri": reference.identifier_list_uri,
-            "id": str(reference.idx),
-        },
-    }
+    return StatusListTakeResponse(
+        status_list={"uri": reference.status_list_uri, "idx": reference.idx},
+        identifier_list={"uri": reference.identifier_list_uri, "id": str(reference.idx)},
+    )
 
 
 def _serve_reference_list(uri: str, request: Request, kind: str) -> Response:

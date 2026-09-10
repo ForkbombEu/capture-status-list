@@ -635,6 +635,19 @@ _CONSOLE_BODY = """  <header class="hero">
             </table>
           </div>
         </div>
+
+        <div class="section-header mt-4">
+          <h3>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
+        </div>
+        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier.</p>
+        <div class="credential-scroll">
+          <div class="test-table-wrap">
+            <table class="test-table">
+              <thead><tr><th>Country</th><th>Doctype</th><th>Index</th><th>Expiry</th><th>Status</th><th>Status list URI</th></tr></thead>
+              <tbody id="allocation-rows"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       </div>
@@ -731,6 +744,8 @@ _CONSOLE_SCRIPT = """<script>
     const rows = document.querySelector("#rows");
     const registryRows = document.querySelector("#registry-rows");
     const registryCount = document.querySelector("#registry-count");
+    const allocationRows = document.querySelector("#allocation-rows");
+    const allocationCount = document.querySelector("#allocation-count");
     const out = document.querySelector("#out");
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
@@ -806,6 +821,20 @@ _CONSOLE_SCRIPT = """<script>
       };
     }
 
+    function renderAllocations(entries) {
+      allocationCount.textContent = entries.length;
+      allocationRows.innerHTML = entries.length
+        ? entries.map((item) => `<tr class="${escapeHtml(item.status.toLowerCase())}">
+            <td class="cell-mono">${escapeHtml(item.country)}</td>
+            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            <td class="cell-mono">${item.idx}</td>
+            <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
+            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
+            <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="6">No status-list entries allocated yet.</td></tr>`;
+    }
+
     let formatPreview = null;
 
     function renderRegistry(lists) {
@@ -863,6 +892,7 @@ _CONSOLE_SCRIPT = """<script>
         jsonFetch("/debug/status-lists"),
       ]);
       credentials = data.credentials;
+      renderAllocations(data.allocated_entries);
       verification = Object.fromEntries(
         credentials
           .filter((item) => item.verification_result)

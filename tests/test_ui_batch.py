@@ -69,7 +69,7 @@ def test_page_content_keeps_the_container_side_gutter() -> None:
 def test_page_bands_share_one_fixed_gutter() -> None:
     html = client.get("/").text
 
-    assert ":root { --page-gutter: 92px; }" in html
+    assert ":root { --page-gutter: 46px; }" in html
     assert ".topbar-inner, .hero-inner, .container, .footer-inner {" in html
 
 

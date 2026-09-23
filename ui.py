@@ -90,7 +90,7 @@ APP_CSS = """
     /* Page gutter: the topbar, hero, content and footer share one fixed side
        gutter so their edges line up, and they grow with the window instead of
        stopping at the brand max-width. Small screens keep the brand gutter. */
-    :root { --page-gutter: 92px; }
+    :root { --page-gutter: 46px; }
     .topbar-inner, .hero-inner, .container, .footer-inner {
       max-width: none;
       padding-left: var(--page-gutter);

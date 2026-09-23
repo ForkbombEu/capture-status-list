@@ -46,12 +46,30 @@ def test_console_is_served_at_the_root() -> None:
 def test_console_renders_results_panel_before_the_token() -> None:
     html = client.get("/").text
 
-    assert 'class="container console-container page-content"' in html
+    assert '<main class="page-content">\n    <div class="container console-container">' in html
     assert 'class="console-grid"' in html
     assert 'class="stack console-left"' in html
     assert 'class="stack console-right"' in html
     assert html.index('id="rows"') < html.index('id="out"')
     assert html.index('id="out"') < html.index('id="token-card"')
+
+
+def test_page_content_keeps_the_container_side_gutter() -> None:
+    # .page-content resets horizontal padding, so it must not share an element
+    # with .container: the gutter lives on a nested .container instead.
+    for path in ("/", "/docs"):
+        html = client.get(path).text
+        assert 'class="page-content"' in html
+        assert "container page-content" not in html
+        assert "page-content container" not in html
+
+
+def test_footer_links_to_the_repository() -> None:
+    html = client.get("/").text
+
+    repository = '<a href="https://github.com/ForkbombEu/capture-status-list"'
+    assert repository in html
+    assert html.index('<a href="/docs">API docs</a>') < html.index(repository)
 
 
 def test_verify_and_revoke_reload_the_status_list_token() -> None:

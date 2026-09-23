@@ -504,6 +504,8 @@ _FOOTER = f"""  <footer class="footer">
             <a href="/status/1">Legacy status list token</a>
             <a href="/.well-known/jwks.json">JWKS</a>
             <a href="/docs">API docs</a>
+            <a href="https://github.com/ForkbombEu/capture-status-list"
+               target="_blank" rel="noopener">Repository</a>
           </div>
           <div class="footer-col">
             <h5>Standards</h5>
@@ -558,7 +560,8 @@ _CONSOLE_BODY = """  <header class="hero">
         Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
     </div>
   </header>
-  <main class="container console-container page-content">
+  <main class="page-content">
+    <div class="container console-container">
     <div class="console-grid">
       <div class="stack console-left">
       <section class="card batch-card">
@@ -736,6 +739,7 @@ _CONSOLE_BODY = """  <header class="hero">
       </section>
 
       </aside>
+    </div>
     </div>
   </main>"""
 
@@ -1187,8 +1191,10 @@ def docs_html(openapi_url: str) -> str:
         OpenAPI document at <span class="mono">/openapi.json</span>.</p>
     </div>
   </header>
-  <main class="container page-content">
-    <div class="docs-frame"><div id="swagger-ui"></div></div>
+  <main class="page-content">
+    <div class="container">
+      <div class="docs-frame"><div id="swagger-ui"></div></div>
+    </div>
   </main>"""
     return page(
         title="API documentation · Credimi",

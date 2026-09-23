@@ -87,7 +87,19 @@ APP_CSS = """
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
     .batch-card { max-width: none; }
-    /* Console layout: a two-column dashboard inside the brand container —
+    /* Page gutter: the topbar, hero, content and footer share one fixed side
+       gutter so their edges line up, and they grow with the window instead of
+       stopping at the brand max-width. Small screens keep the brand gutter. */
+    :root { --page-gutter: 92px; }
+    .topbar-inner, .hero-inner, .container, .footer-inner {
+      max-width: none;
+      padding-left: var(--page-gutter);
+      padding-right: var(--page-gutter);
+    }
+    @media (max-width: 768px) {
+      :root { --page-gutter: var(--space-4); }
+    }
+    /* Console layout: a two-column dashboard inside the page gutter —
        forms and info on the left, results on the right, so every CTA
        produces feedback the user can see without scrolling away. */
     .console-grid {

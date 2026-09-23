@@ -46,7 +46,9 @@ def test_console_is_served_at_the_root() -> None:
 def test_console_renders_results_panel_before_the_token() -> None:
     html = client.get("/").text
 
-    assert '<main class="page-content">\n    <div class="container console-container">' in html
+    assert '<main class="page-content">\n    <div class="container">' in html
+    # The console shares the brand max-width so it lines up with the header.
+    assert "console-container" not in html
     assert 'class="console-grid"' in html
     assert 'class="stack console-left"' in html
     assert 'class="stack console-right"' in html

@@ -87,10 +87,9 @@ APP_CSS = """
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
     .batch-card { max-width: none; }
-    /* Console layout: the page runs full width as a two-column dashboard —
+    /* Console layout: a two-column dashboard inside the brand container —
        forms and info on the left, results on the right, so every CTA
        produces feedback the user can see without scrolling away. */
-    .console-container { max-width: none; }
     .console-grid {
       display: grid;
       grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -561,7 +560,7 @@ _CONSOLE_BODY = """  <header class="hero">
     </div>
   </header>
   <main class="page-content">
-    <div class="container console-container">
+    <div class="container">
     <div class="console-grid">
       <div class="stack console-left">
       <section class="card batch-card">

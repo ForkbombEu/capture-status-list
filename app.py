@@ -38,6 +38,8 @@ from issuer import (
 from models import (
     BatchError,
     AllocatedStatusListEntry,
+    DashboardAllocatedEntryRevokeRequest,
+    DashboardAllocatedEntryRevokeResponse,
     CredentialIdsRequest,
     CredentialListItem,
     CredentialListResponse,
@@ -205,6 +207,25 @@ def revoke_batch(request: CredentialIdsRequest) -> RevokeBatchResponse:
         except KeyError as exc:
             errors.append(BatchError(credential_id=credential_id, error=str(exc)))
     return RevokeBatchResponse(revoked=revoked, errors=errors)
+
+
+@app.post(
+    "/dashboard/allocated-entries/revoke",
+    response_model=DashboardAllocatedEntryRevokeResponse,
+    include_in_schema=False,
+)
+def revoke_dashboard_allocated_entry(
+    request: DashboardAllocatedEntryRevokeRequest,
+) -> DashboardAllocatedEntryRevokeResponse:
+    try:
+        set_eudi_status(request.status_list_uri, request.idx)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DashboardAllocatedEntryRevokeResponse(
+        status_list_uri=request.status_list_uri,
+        idx=request.idx,
+        status="REVOKED",
+    )
 
 
 async def _reference_form(request: Request) -> dict[str, str]:

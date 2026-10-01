@@ -653,11 +653,7 @@ _CONSOLE_BODY = """  <header class="hero">
         <div class="section-header mt-4">
           <h3>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
         </div>
-        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier. Revoke an entry with the API key configured for the status-list service.</p>
-        <div class="allocation-api-key">
-          <label class="field-label" for="eudi-api-key">EUDI API key</label>
-          <input id="eudi-api-key" type="password" autocomplete="off">
-        </div>
+        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier. Revoke an entry directly from this test dashboard.</p>
         <div class="credential-scroll">
           <div class="test-table-wrap">
             <table class="test-table">
@@ -859,18 +855,11 @@ _CONSOLE_SCRIPT = """<script>
         : `<tr class="empty-row"><td colspan="7">No status-list entries allocated yet.</td></tr>`;
       allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
         button.onclick = async () => {
-          const apiKey = document.querySelector("#eudi-api-key").value;
-          if (!apiKey) return write("Enter the EUDI API key before revoking an allocated entry.");
-          const data = await jsonFetch("/token_status_list/set", {
+          const data = await jsonFetch("/dashboard/allocated-entries/revoke", {
             method: "POST",
-            headers: {
-              "content-type": "application/x-www-form-urlencoded",
-              "X-Api-Key": apiKey,
-            },
-            body: new URLSearchParams({
-              uri: button.dataset.allocationUri,
-              idx: button.dataset.allocationIdx,
-              status: "1",
+            body: JSON.stringify({
+              status_list_uri: button.dataset.allocationUri,
+              idx: Number(button.dataset.allocationIdx),
             }),
           });
           write(data);

@@ -173,6 +173,27 @@ def test_set_updates_token_and_identifier_lists() -> None:
     assert client.get("/identifier_list/get", params={"uri": identifier_uri, "id": idx}).text == "1"
 
 
+def test_dashboard_revokes_allocated_entry_without_an_api_key() -> None:
+    reference = take()
+    token_uri = reference["status_list"]["uri"]
+    identifier_uri = reference["identifier_list"]["uri"]
+    idx = reference["status_list"]["idx"]
+
+    response = client.post(
+        "/dashboard/allocated-entries/revoke",
+        json={"status_list_uri": token_uri, "idx": idx},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status_list_uri": token_uri,
+        "idx": idx,
+        "status": "REVOKED",
+    }
+    assert client.get("/token_status_list/get", params={"uri": token_uri, "idx": idx}).text == "1"
+    assert client.get("/identifier_list/get", params={"uri": identifier_uri, "id": idx}).text == "1"
+
+
 def test_new_country_doctype_gets_a_distinct_uuid_list() -> None:
     first = take()
     second = client.post(

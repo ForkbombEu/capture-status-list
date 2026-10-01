@@ -44,6 +44,17 @@ class AllocatedStatusListEntry(BaseModel):
     status: str
 
 
+class DashboardAllocatedEntryRevokeRequest(BaseModel):
+    status_list_uri: str
+    idx: int = Field(ge=0)
+
+
+class DashboardAllocatedEntryRevokeResponse(BaseModel):
+    status_list_uri: str
+    idx: int
+    status: str
+
+
 class CredentialListResponse(BaseModel):
     credentials: list[CredentialListItem]
     allocated_entries: list[AllocatedStatusListEntry]

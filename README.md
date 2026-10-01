@@ -254,6 +254,10 @@ curl -X POST http://localhost:8000/token_status_list/set \
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
 the console.
 
+The console exposes each allocated entry with a revoke action. Enter the same
+`X-Api-Key` value used by the reference API; the value is sent only to
+`POST /token_status_list/set` for that entry.
+
 Create a test credential:
 
 ```sh

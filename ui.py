@@ -653,11 +653,15 @@ _CONSOLE_BODY = """  <header class="hero">
         <div class="section-header mt-4">
           <h3>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
         </div>
-        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier.</p>
+        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier. Revoke an entry with the API key configured for the status-list service.</p>
+        <div class="allocation-api-key">
+          <label class="field-label" for="eudi-api-key">EUDI API key</label>
+          <input id="eudi-api-key" type="password" autocomplete="off">
+        </div>
         <div class="credential-scroll">
           <div class="test-table-wrap">
             <table class="test-table">
-              <thead><tr><th>Country</th><th>Doctype</th><th>Index</th><th>Expiry</th><th>Status</th><th>Status list URI</th></tr></thead>
+              <thead><tr><th>Country</th><th>Doctype</th><th>Index</th><th>Expiry</th><th>Status</th><th>Status list URI</th><th>Actions</th></tr></thead>
               <tbody id="allocation-rows"></tbody>
             </table>
           </div>
@@ -839,15 +843,40 @@ _CONSOLE_SCRIPT = """<script>
     function renderAllocations(entries) {
       allocationCount.textContent = entries.length;
       allocationRows.innerHTML = entries.length
-        ? entries.map((item) => `<tr class="${escapeHtml(item.status.toLowerCase())}">
-            <td class="cell-mono">${escapeHtml(item.country)}</td>
-            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
-            <td class="cell-mono">${item.idx}</td>
-            <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
-            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
-            <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="6">No status-list entries allocated yet.</td></tr>`;
+        ? entries.map((item) => {
+            const status = escapeHtml(item.status);
+            const revoked = item.status === "REVOKED";
+            return `<tr class="${escapeHtml(item.status.toLowerCase())}">
+              <td class="cell-mono">${escapeHtml(item.country)}</td>
+              <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+              <td class="cell-mono">${item.idx}</td>
+              <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
+              <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${status}</span></td>
+              <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
+              <td><button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke ${escapeHtml(item.country)} ${escapeHtml(item.doctype)} entry ${item.idx}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button></td>
+            </tr>`;
+          }).join("")
+        : `<tr class="empty-row"><td colspan="7">No status-list entries allocated yet.</td></tr>`;
+      allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
+        button.onclick = async () => {
+          const apiKey = document.querySelector("#eudi-api-key").value;
+          if (!apiKey) return write("Enter the EUDI API key before revoking an allocated entry.");
+          const data = await jsonFetch("/token_status_list/set", {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              "X-Api-Key": apiKey,
+            },
+            body: new URLSearchParams({
+              uri: button.dataset.allocationUri,
+              idx: button.dataset.allocationIdx,
+              status: "1",
+            }),
+          });
+          write(data);
+          await load();
+        };
+      });
     }
 
     let formatPreview = null;

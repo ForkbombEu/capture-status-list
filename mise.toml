@@ -3,7 +3,7 @@ go = "1.26.2"
 node = "latest"
 python = "3.12"
 uv = "latest"
-docker-cli = "system"
+docker-cli = "latest"
 
 [tasks.test]
 run = "go test ./..."

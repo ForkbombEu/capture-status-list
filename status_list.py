@@ -15,6 +15,7 @@ DEFAULT_BITS = 1
 DEFAULT_STATUS_LIST_SIZE = 10_000
 STATUS_VALID = 0x00
 STATUS_INVALID = 0x01
+STATUS_SUSPENDED = 0x02
 
 
 TOKEN_TTL_SECONDS = 43_200
@@ -83,6 +84,8 @@ def status_label(value: int) -> str:
         return "VALID"
     if value == STATUS_INVALID:
         return "REVOKED"
+    if value == STATUS_SUSPENDED:
+        return "SUSPENDED"
     return f"UNKNOWN({value})"
 
 

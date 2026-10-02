@@ -61,8 +61,9 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn app:app --reload
 ```
 
-Open the console at `http://localhost:8000/` and the branded API documentation
-at `http://localhost:8000/docs`.
+Open the console at `http://localhost:8000/`, the status list explorer at
+`http://localhost:8000/explorer`, and the branded API documentation at
+`http://localhost:8000/docs`.
 
 Seed demo UI data after the server is running:
 
@@ -321,6 +322,37 @@ Reset all in-memory test state:
 ```sh
 curl -X POST http://localhost:8000/reset
 ```
+
+## Status list explorer
+
+`/explorer` is a standalone debugger for status lists from any issuer, not
+only this server. Paste a payload (or load a file) and it shows the decoded
+header and payload, the inflated `lst` spectrum, every non-valid index grouped
+by status (`REVOKED`, `SUSPENDED`, `UNKNOWN(n)`), and the status of a single
+index. Accepted inputs:
+
+- a Status List JWT (`header.payload.signature`)
+- a Status List CWT (COSE_Sign1, optionally CWT-tagged) as hex, base64 or
+  base64url; binary `.cwt` files are accepted through the file picker
+- the JSON payload with a `status_list` claim, or the bare
+  `{"bits": …, "lst": …}` claim
+- the `lst` value alone, decoded with the selected bits per entry
+
+Signatures are not verified: a foreign list's signing key is unknown here, so
+the explorer is an inspection tool, not a verifier. Inflated lists are capped at
+128 KiB (1,048,576 entries at `bits = 1`) to refuse decompression bombs.
+
+The page calls the debug-only endpoint directly:
+
+```sh
+curl -X POST http://localhost:8000/debug/status-list/explore \
+  -H 'content-type: application/json' \
+  -d '{"payload": "<jwt, cwt hex/base64, json or lst>", "bits": 1}'
+```
+
+The response carries `format`, `header`, `payload`, `bits`, `size`, per-status
+`counts`, `non_valid_indices`, and the same `lst` rendering as
+`/debug/status-list`.
 
 ## Privacy Notes
 

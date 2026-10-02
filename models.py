@@ -158,6 +158,23 @@ class StatusListDebugResponse(BaseModel):
     jwks: dict[str, list[dict[str, str]]]
 
 
+class StatusListExploreRequest(BaseModel):
+    payload: str = Field(min_length=1, max_length=2_000_000)
+    bits: int = Field(default=1, description="Bits per entry; used only for a bare lst value.")
+
+
+class StatusListExploreResponse(BaseModel):
+    warning: str = "TEST/DEBUG ONLY"
+    format: str
+    header: dict
+    payload: dict
+    bits: int
+    size: int
+    counts: dict[str, int]
+    non_valid_indices: list[int]
+    lst: StatusListBits
+
+
 class ResetResponse(BaseModel):
     status: str = "RESET"
     size: int = 10000

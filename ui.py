@@ -412,6 +412,57 @@ APP_CSS = """
       color: var(--fg-subtle);
       word-break: break-word;
     }
+    .index-groups .eyebrow { margin-top: var(--space-3); }
+    .index-groups .eyebrow:first-child { margin-top: 0; }
+
+    /* Explorer: the pasted payload, its options, and the single-index lookup. */
+    .payload-input {
+      display: block;
+      width: 100%;
+      min-height: 160px;
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--bg);
+      color: var(--fg);
+      font: var(--fs-sm)/1.5 var(--font-mono);
+      resize: vertical;
+      word-break: break-all;
+    }
+    .payload-input:focus,
+    .explorer-select:focus {
+      outline: none;
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 3px oklch(0.2955 0.1659 277.31 / 0.18);
+    }
+    .explorer-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 var(--space-3);
+    }
+    @media (max-width: 560px) {
+      .explorer-fields { grid-template-columns: 1fr; }
+    }
+    .explorer-select {
+      width: 100%;
+      height: 36px;
+      padding: 0 var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--bg);
+      color: var(--fg);
+      font: var(--fs-base) var(--font-sans);
+    }
+    .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
+    .index-lookup {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .index-lookup input[type="number"] { width: 160px; }
+    .status-suspended { background: var(--warning-bg); color: var(--fg); }
+    .status-suspended::before { background: var(--warning); }
 
     /* Swagger UI ships its own reset; keep it inside the branded card and on
        the brand families. */
@@ -482,7 +533,12 @@ _EXTRAS_BOTTOM = f"""    <div class="extras-bottom">
 
 
 def _topbar(active: str) -> str:
-    links = (("Console", "/"), ("API docs", "/docs"), ("Status list API", "/token_status_list/take"))
+    links = (
+        ("Console", "/"),
+        ("Explorer", "/explorer"),
+        ("API docs", "/docs"),
+        ("Status list API", "/token_status_list/take"),
+    )
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
             href=href,
@@ -755,6 +811,115 @@ _CONSOLE_BODY = """  <header class="hero">
   </main>"""
 
 
+# Helpers shared by the console and the explorer: HTML escaping, the styled
+# console signature, and the inflated-lst spectrum renderer.
+_SHARED_SCRIPT = """<script>
+    console.log(
+      "%c Credimi %c Token status list · ForkBomb BV ",
+      "background:#220E7E;color:#FAFAFA;font-weight:700;padding:2px 6px;border-radius:4px 0 0 4px",
+      "background:#EEEAFE;color:#220E7E;font-weight:600;padding:2px 6px;border-radius:0 4px 4px 0",
+    );
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    const ROW_ENTRIES = 64;
+
+    // One character per entry (two when bits is 8), 64 entries to a row, with
+    // every non-zero — that is, not VALID — entry marked. `prefix` selects the
+    // #<prefix>-bitmap, -bitmap-scroll, -minimap and -caption elements.
+    function renderBitmap(prefix, lst, markedIndices) {
+      const bitmapScroll = document.querySelector(`#${prefix}-bitmap-scroll`);
+      const bitmap = document.querySelector(`#${prefix}-bitmap`);
+      const minimap = document.querySelector(`#${prefix}-minimap`);
+      const full = lst.full || lst.window;
+      const width = ROW_ENTRIES * lst.chars_per_entry;
+      let html = "";
+      let minimapHtml = "";
+
+      for (let offset = 0, rowNumber = 0; offset < full.length; offset += width, rowNumber += 1) {
+        const row = full.slice(offset, offset + width);
+        const index = offset / lst.chars_per_entry;
+        const rowMarked = markedIndices.filter((entry) => entry >= index && entry < index + row.length / lst.chars_per_entry);
+        const marked = [...row]
+          .map((char, position) => {
+            const spacer = position > 0 && position % (8 * lst.chars_per_entry) === 0 ? " " : "";
+            return spacer + (char === "0" ? char : `<b>${escapeHtml(char)}</b>`);
+          })
+          .join("");
+        html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
+        const marker = rowMarked.length
+          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to entries ${escapeHtml(rowMarked.join(", "))}" title="Not valid: ${escapeHtml(rowMarked.join(", "))}"></button>`
+          : `<button class="bitmap-minimap-row-jump" type="button" data-row="${rowNumber}" aria-label="Jump to entries starting at ${index}" title="Entries ${index} to ${index + ROW_ENTRIES - 1}"></button>`;
+        minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
+      }
+
+      bitmap.innerHTML = html;
+      minimap.innerHTML = `<div class="bitmap-minimap-viewport" role="slider" tabindex="0" aria-label="Spectrum scroll position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>` +
+        (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
+      const totalRows = Math.ceil(full.length / width);
+      minimap.querySelectorAll("button[data-row]").forEach((marker) => {
+        marker.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const rowNumber = Number(marker.dataset.row);
+          const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+          const target = totalRows <= 1 ? 0 : rowNumber / (totalRows - 1) * maxScroll;
+          bitmapScroll.scrollTo({ top: target, behavior: "auto" });
+        };
+      });
+
+      const viewport = minimap.querySelector(".bitmap-minimap-viewport");
+      const syncViewport = () => {
+        const contentHeight = Math.max(1, bitmapScroll.scrollHeight);
+        const progress = bitmapScroll.scrollTop / Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        viewport.style.top = `${bitmapScroll.scrollTop / contentHeight * 100}%`;
+        viewport.style.height = `${bitmapScroll.clientHeight / contentHeight * 100}%`;
+        viewport.setAttribute("aria-valuenow", String(Math.round(progress * 100)));
+      };
+      let dragStartY = null;
+      let dragStartScroll = 0;
+      viewport.addEventListener("pointerdown", (event) => {
+        dragStartY = event.clientY;
+        dragStartScroll = bitmapScroll.scrollTop;
+        viewport.classList.add("dragging");
+        viewport.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      viewport.addEventListener("pointermove", (event) => {
+        if (dragStartY === null) return;
+        const track = Math.max(1, minimap.clientHeight - viewport.offsetHeight);
+        const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
+        bitmapScroll.scrollTop = dragStartScroll + (event.clientY - dragStartY) / track * maxScroll;
+      });
+      const stopDrag = (event) => {
+        if (dragStartY === null) return;
+        dragStartY = null;
+        viewport.classList.remove("dragging");
+        if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+      };
+      viewport.addEventListener("pointerup", stopDrag);
+      viewport.addEventListener("pointercancel", stopDrag);
+      viewport.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        bitmapScroll.scrollTop += event.key === "ArrowDown" ? bitmapScroll.clientHeight / 5 : -bitmapScroll.clientHeight / 5;
+        event.preventDefault();
+      });
+      bitmapScroll.onscroll = syncViewport;
+      syncViewport();
+      const last = lst.entries - 1;
+      document.querySelector(`#${prefix}-caption`).textContent =
+        `Entries 0 to ${last} of ${lst.entries}. Red bars mark rows with non-valid entries; click a bar to jump there.`;
+    }
+  </script>"""
+
+
 _CONSOLE_SCRIPT = """<script>
     const rows = document.querySelector("#rows");
     const registryRows = document.querySelector("#registry-rows");
@@ -765,15 +930,6 @@ _CONSOLE_SCRIPT = """<script>
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
-
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
-    }
 
     function selectedIds() {
       return [...document.querySelectorAll("tbody input:checked")]
@@ -1004,94 +1160,6 @@ _CONSOLE_SCRIPT = """<script>
         `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
     }
 
-    const ROW_ENTRIES = 64;
-
-    // One character per entry (two when bits is 8), 64 entries to a row, with
-    // every non-zero — that is, revoked — entry marked.
-    function renderBitmap(lst, revokedIndices) {
-      const bitmapScroll = document.querySelector("#lst-bitmap-scroll");
-      const bitmap = document.querySelector("#lst-bitmap");
-      const minimap = document.querySelector("#lst-minimap");
-      const full = lst.full || lst.window;
-      const width = ROW_ENTRIES * lst.chars_per_entry;
-      let html = "";
-      let minimapHtml = "";
-
-      for (let offset = 0, rowNumber = 0; offset < full.length; offset += width, rowNumber += 1) {
-        const row = full.slice(offset, offset + width);
-        const index = offset / lst.chars_per_entry;
-        const rowRevoked = revokedIndices.filter((entry) => entry >= index && entry < index + row.length / lst.chars_per_entry);
-        const marked = [...row]
-          .map((char, position) => {
-            const spacer = position > 0 && position % (8 * lst.chars_per_entry) === 0 ? " " : "";
-            return spacer + (char === "0" ? char : `<b>${escapeHtml(char)}</b>`);
-          })
-          .join("");
-        html += `<span class="bitmap-index" data-row="${rowNumber}">${index}</span><span class="bitmap-row" data-row="${rowNumber}">${marked}</span>`;
-        const marker = rowRevoked.length
-          ? `<button class="bitmap-minimap-marker" type="button" data-row="${rowNumber}" aria-label="Jump to revoked entries ${escapeHtml(rowRevoked.join(", "))}" title="Revoked: ${escapeHtml(rowRevoked.join(", "))}"></button>`
-          : `<button class="bitmap-minimap-row-jump" type="button" data-row="${rowNumber}" aria-label="Jump to entries starting at ${index}" title="Entries ${index} to ${index + ROW_ENTRIES - 1}"></button>`;
-        minimapHtml += `<div class="bitmap-minimap-line">${marker}</div>`;
-      }
-
-      bitmap.innerHTML = html;
-      minimap.innerHTML = `<div class="bitmap-minimap-viewport" role="slider" tabindex="0" aria-label="Spectrum scroll position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>` +
-        (minimapHtml || `<span class="bitmap-minimap-empty">No revoked entries</span>`);
-      const totalRows = Math.ceil(full.length / width);
-      minimap.querySelectorAll("button[data-row]").forEach((marker) => {
-        marker.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const rowNumber = Number(marker.dataset.row);
-          const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
-          const target = totalRows <= 1 ? 0 : rowNumber / (totalRows - 1) * maxScroll;
-          bitmapScroll.scrollTo({ top: target, behavior: "auto" });
-        };
-      });
-
-      const viewport = minimap.querySelector(".bitmap-minimap-viewport");
-      const syncViewport = () => {
-        const contentHeight = Math.max(1, bitmapScroll.scrollHeight);
-        const progress = bitmapScroll.scrollTop / Math.max(1, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
-        viewport.style.top = `${bitmapScroll.scrollTop / contentHeight * 100}%`;
-        viewport.style.height = `${bitmapScroll.clientHeight / contentHeight * 100}%`;
-        viewport.setAttribute("aria-valuenow", String(Math.round(progress * 100)));
-      };
-      let dragStartY = null;
-      let dragStartScroll = 0;
-      viewport.addEventListener("pointerdown", (event) => {
-        dragStartY = event.clientY;
-        dragStartScroll = bitmapScroll.scrollTop;
-        viewport.classList.add("dragging");
-        viewport.setPointerCapture(event.pointerId);
-        event.preventDefault();
-      });
-      viewport.addEventListener("pointermove", (event) => {
-        if (dragStartY === null) return;
-        const track = Math.max(1, minimap.clientHeight - viewport.offsetHeight);
-        const maxScroll = Math.max(0, bitmapScroll.scrollHeight - bitmapScroll.clientHeight);
-        bitmapScroll.scrollTop = dragStartScroll + (event.clientY - dragStartY) / track * maxScroll;
-      });
-      const stopDrag = (event) => {
-        if (dragStartY === null) return;
-        dragStartY = null;
-        viewport.classList.remove("dragging");
-        if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
-      };
-      viewport.addEventListener("pointerup", stopDrag);
-      viewport.addEventListener("pointercancel", stopDrag);
-      viewport.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-        bitmapScroll.scrollTop += event.key === "ArrowDown" ? bitmapScroll.clientHeight / 5 : -bitmapScroll.clientHeight / 5;
-        event.preventDefault();
-      });
-      bitmapScroll.onscroll = syncViewport;
-      syncViewport();
-      const last = lst.entries - 1;
-      document.querySelector("#lst-caption").textContent =
-        `Entries 0 to ${last} of ${lst.entries}. Red bars mark revoked rows; click a bar to jump there.`;
-    }
-
     function renderAssignments(data) {
       const rows = document.querySelector("#lst-rows");
       rows.innerHTML = data.assignments.length
@@ -1139,7 +1207,7 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
       document.querySelector("#lst-revoked").textContent = data.revoked;
-      renderBitmap(data.lst, data.revoked_indices);
+      renderBitmap("lst", data.lst, data.revoked_indices);
       document.querySelector("#lst-note").textContent =
         `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
         `${data.lst.inflated_bytes} bytes holding ${data.lst.entries} entries at ` +
@@ -1202,7 +1270,247 @@ def console_html() -> str:
         title="Token status list console · Credimi",
         active="Console",
         body=_CONSOLE_BODY,
-        scripts=_CONSOLE_SCRIPT,
+        scripts=_SHARED_SCRIPT + "\n" + _CONSOLE_SCRIPT,
+    )
+
+
+_EXPLORER_BODY = """  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">EUDI conformance utility</p>
+      <h1>Status list explorer</h1>
+      <p>Paste a Token Status List from any issuer and inspect it: the decoded header and
+        payload, the inflated <span class="mono">lst</span>, every revoked index, and the status
+        of a single index. Accepts a JWT, a CWT as hex or base64, the JSON payload, or the
+        bare <span class="mono">lst</span> value. Signatures are not verified.</p>
+    </div>
+  </header>
+  <main class="page-content">
+    <div class="container">
+    <div class="stack">
+      <section class="card">
+        <div class="section-header"><h2>Payload</h2></div>
+        <label class="field-label" for="explore-payload">Status list JWT, CWT, JSON payload or lst</label>
+        <textarea id="explore-payload" class="payload-input" spellcheck="false"
+          placeholder="eyJhbGciOiJFUzI1NiIs… · d28450a3… · {&quot;bits&quot;:1,&quot;lst&quot;:&quot;eNrb…&quot;} · eNrb…"></textarea>
+        <div class="explorer-fields">
+          <div>
+            <label class="field-label" for="explore-bits">Bits per entry, for a bare lst</label>
+            <select id="explore-bits" class="explorer-select">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="explore-file">Or load a file</label>
+            <input id="explore-file" type="file" class="explorer-file">
+          </div>
+        </div>
+        <div class="btn-row mt-4">
+          <button id="explore" class="btn btn-md btn-primary">Inspect payload</button>
+          <button id="explore-current" class="btn btn-md btn-outline">Load this server's status list</button>
+        </div>
+        <pre class="output mt-4" id="explore-out">Paste a payload, then inspect it.</pre>
+      </section>
+
+      <section class="card" id="explore-card" hidden>
+        <div class="section-header"><h2>Decoded status list</h2></div>
+        <div class="metric-grid">
+          <div class="card">
+            <strong class="metric-value" id="explore-format">—</strong>
+            <span class="eyebrow">Format</span>
+          </div>
+          <div class="card">
+            <strong class="metric-value" id="explore-bits-value">0</strong>
+            <span class="eyebrow">Bits per entry</span>
+          </div>
+          <div class="card">
+            <strong class="metric-value" id="explore-size">0</strong>
+            <span class="eyebrow">Entries</span>
+          </div>
+          <div class="card">
+            <strong class="metric-value" id="explore-revoked">0</strong>
+            <span class="eyebrow">Revoked</span>
+          </div>
+        </div>
+        <p class="lst-note" id="explore-note"></p>
+
+        <h3 class="subhead">Check an index</h3>
+        <div class="index-lookup">
+          <input id="explore-index" type="number" min="0" value="0" aria-label="Index">
+          <button id="explore-lookup" class="btn btn-sm btn-secondary">Check index</button>
+          <span id="explore-index-status"></span>
+        </div>
+
+        <h3 class="subhead">Non-valid indices</h3>
+        <div id="explore-indices" class="index-groups"></div>
+        <div class="btn-row mt-4">
+          <button id="explore-copy-indices" class="btn btn-sm btn-outline">Copy the indices</button>
+        </div>
+
+        <h3 class="subhead">Inflated lst spectrum</h3>
+        <div class="bitmap-shell">
+          <div class="bitmap-scroll" id="explore-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
+            <div class="bitmap" id="explore-bitmap"></div>
+          </div>
+          <div class="bitmap-minimap-scroll" id="explore-minimap-scroll" tabindex="0" aria-label="Non-valid entry minimap">
+            <div class="bitmap-minimap" id="explore-minimap"></div>
+          </div>
+        </div>
+        <p class="bitmap-caption" id="explore-caption"></p>
+
+        <h3 class="subhead">Decoded token</h3>
+        <div class="decoded-grid">
+          <div>
+            <p class="eyebrow">Header</p>
+            <pre id="explore-header"></pre>
+          </div>
+          <div>
+            <p class="eyebrow">Payload</p>
+            <pre id="explore-payload-json"></pre>
+          </div>
+        </div>
+      </section>
+    </div>
+    </div>
+  </main>"""
+
+
+_EXPLORER_SCRIPT = """<script>
+    const STATUS_NAMES = { 0: "VALID", 1: "REVOKED", 2: "SUSPENDED" };
+    const payloadInput = document.querySelector("#explore-payload");
+    const explorerOut = document.querySelector("#explore-out");
+    const exploreCard = document.querySelector("#explore-card");
+    let explored = null;
+
+    function statusName(value) {
+      return STATUS_NAMES[value] || `UNKNOWN(${value})`;
+    }
+
+    function statusAt(lst, index) {
+      const width = lst.chars_per_entry;
+      return parseInt(lst.full.slice(index * width, (index + 1) * width), 16);
+    }
+
+    function groupedIndices(data) {
+      const groups = {};
+      for (const index of data.non_valid_indices) {
+        const name = statusName(statusAt(data.lst, index));
+        (groups[name] ||= []).push(index);
+      }
+      return groups;
+    }
+
+    function renderIndices(data) {
+      const groups = groupedIndices(data);
+      const names = Object.keys(groups);
+      document.querySelector("#explore-indices").innerHTML = names.length
+        ? names.map((name) => {
+            const indices = groups[name];
+            const shown = indices.slice(0, 500);
+            const rest = indices.length - shown.length;
+            return `<p class="eyebrow">${escapeHtml(name)} · ${indices.length}</p>` +
+              `<p class="index-list">${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}</p>`;
+          }).join("")
+        : `<p class="index-list">None. Every entry is VALID.</p>`;
+    }
+
+    function lookupIndex() {
+      if (!explored) return;
+      const target = document.querySelector("#explore-index-status");
+      const index = Number(document.querySelector("#explore-index").value);
+      if (!Number.isInteger(index) || index < 0 || index >= explored.size) {
+        target.innerHTML = `<span class="status-chip status-reject">Out of range: 0 to ${explored.size - 1}</span>`;
+        return;
+      }
+      const name = statusName(statusAt(explored.lst, index));
+      target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(name)}</span>`;
+    }
+
+    function renderExplored(data) {
+      explored = data;
+      document.querySelector("#explore-format").textContent = data.format.toUpperCase();
+      document.querySelector("#explore-bits-value").textContent = data.bits;
+      document.querySelector("#explore-size").textContent = data.size;
+      document.querySelector("#explore-revoked").textContent = data.counts.REVOKED || 0;
+      const counts = Object.entries(data.counts).map(([name, count]) => `${count} ${name}`).join(", ");
+      document.querySelector("#explore-note").textContent =
+        `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
+        `${data.lst.inflated_bytes} bytes holding ${data.size} entries at ${data.bits} ` +
+        `bit${data.bits === 1 ? "" : "s"} per entry: ${counts}.`;
+      document.querySelector("#explore-header").textContent = JSON.stringify(data.header, null, 2);
+      document.querySelector("#explore-payload-json").textContent = JSON.stringify(data.payload, null, 2);
+      renderIndices(data);
+      renderBitmap("explore", data.lst, data.non_valid_indices);
+      exploreCard.hidden = false;
+      lookupIndex();
+    }
+
+    async function inspect() {
+      const payload = payloadInput.value.trim();
+      if (!payload) return void (explorerOut.textContent = "Paste a payload first.");
+      const response = await fetch("/debug/status-list/explore", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ payload, bits: Number(document.querySelector("#explore-bits").value) }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        exploreCard.hidden = true;
+        explored = null;
+        explorerOut.textContent = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail, null, 2);
+        return;
+      }
+      renderExplored(body);
+      explorerOut.textContent = `Decoded a ${body.format.toUpperCase()} status list: ${body.size} entries, ${body.non_valid_indices.length} not VALID.`;
+    }
+
+    // Binary CWT files become base64; text files (JWT, JSON, hex) load as-is.
+    document.querySelector("#explore-file").onchange = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let text = null;
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (error) { text = null; }
+      if (text === null || bytes[0] === 0xd2 || bytes[0] === 0xd8 || bytes[0] === 0x84) {
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        payloadInput.value = btoa(binary);
+      } else {
+        payloadInput.value = text.trim();
+      }
+      await inspect();
+    };
+
+    document.querySelector("#explore-current").onclick = async () => {
+      const response = await fetch("/status/1", { cache: "no-store", headers: { accept: "application/statuslist+jwt" } });
+      payloadInput.value = await response.text();
+      await inspect();
+    };
+
+    document.querySelector("#explore").onclick = inspect;
+    document.querySelector("#explore-lookup").onclick = lookupIndex;
+    document.querySelector("#explore-index").onkeydown = (event) => {
+      if (event.key === "Enter") lookupIndex();
+    };
+    document.querySelector("#explore-copy-indices").onclick = async (event) => {
+      if (!explored) return;
+      await navigator.clipboard.writeText(explored.non_valid_indices.join(","));
+      event.target.textContent = "Copied";
+      setTimeout(() => { event.target.textContent = "Copy the indices"; }, 2000);
+    };
+  </script>"""
+
+
+def explorer_html() -> str:
+    """Paste-and-inspect explorer for status lists from any issuer."""
+    return page(
+        title="Status list explorer · Credimi",
+        active="Explorer",
+        body=_EXPLORER_BODY,
+        scripts=_SHARED_SCRIPT + "\n" + _EXPLORER_SCRIPT,
     )
 
 

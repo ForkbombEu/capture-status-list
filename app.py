@@ -52,6 +52,8 @@ from models import (
     StatusListAssignment,
     StatusListBits,
     StatusListDebugResponse,
+    StatusListExploreRequest,
+    StatusListExploreResponse,
     StatusListTakeResponse,
     RevokeBatchResponse,
     RevokeResponse,
@@ -66,7 +68,8 @@ from status_list import (
     status_label,
     unpack_status_values,
 )
-from ui import console_html, docs_html
+from status_list_explorer import ExplorerError, explore_status_list
+from ui import console_html, docs_html, explorer_html
 from verifier import VerificationError, check_status
 
 
@@ -123,6 +126,11 @@ def home() -> HTMLResponse:
 @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
 def docs() -> HTMLResponse:
     return HTMLResponse(docs_html(app.openapi_url or "/openapi.json"))
+
+
+@app.get("/explorer", response_class=HTMLResponse, include_in_schema=False)
+def explorer() -> HTMLResponse:
+    return HTMLResponse(explorer_html())
 
 
 @app.get("/favicon.svg", include_in_schema=False)
@@ -537,6 +545,46 @@ def debug_status_list(
         assignment_limit=assignment_limit,
         assignment_total=assignment_total,
         jwks=public_jwks(),
+    )
+
+
+@app.post("/debug/status-list/explore", response_model=StatusListExploreResponse)
+def debug_explore_status_list(
+    request: StatusListExploreRequest, response: Response
+) -> StatusListExploreResponse:
+    """Decode a pasted status list JWT, CWT, JSON payload or bare `lst`.
+
+    Signatures are not verified: the explorer inspects lists from any issuer.
+    """
+    try:
+        explored = explore_status_list(request.payload, bits=request.bits)
+    except ExplorerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    counts: dict[str, int] = {}
+    non_valid_indices: list[int] = []
+    for idx, value in enumerate(explored.statuses):
+        label = status_label(value)
+        counts[label] = counts.get(label, 0) + 1
+        if value != 0:
+            non_valid_indices.append(idx)
+
+    response.headers["Cache-Control"] = "no-store"
+    return StatusListExploreResponse(
+        format=explored.format,
+        header=explored.header,
+        payload=explored.payload,
+        bits=explored.bits,
+        size=len(explored.statuses),
+        counts=counts,
+        non_valid_indices=non_valid_indices,
+        lst=_status_list_bits(
+            explored.statuses,
+            bits=explored.bits,
+            compressed_bytes=explored.compressed_bytes,
+            inflated_bytes=explored.inflated_bytes,
+            around=non_valid_indices,
+        ),
     )
 
 

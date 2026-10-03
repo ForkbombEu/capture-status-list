@@ -317,6 +317,17 @@ revoked at `bits = 1`):
 curl http://localhost:8000/debug/status-list
 ```
 
+Pass `uri` to decode a country × doctype Token Status List instead, including
+lists allocated and revoked only through the API, and `format=cwt` for its CWT
+(returned hex-encoded in `token`). The console's token card uses this for the
+list picked in its **List shown** selector and the registry **TSL · JWT/CWT**
+buttons, and re-fetches it after every revoke, create, refresh or reset:
+
+```sh
+curl --get http://localhost:8000/debug/status-list \
+  --data-urlencode uri='<status-list-uri>' --data-urlencode format=cwt
+```
+
 Reset all in-memory test state:
 
 ```sh

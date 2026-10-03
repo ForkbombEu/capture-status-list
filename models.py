@@ -142,8 +142,10 @@ class StatusListBits(BaseModel):
 
 class StatusListDebugResponse(BaseModel):
     warning: str = "TEST/DEBUG ONLY"
+    uri: str
+    format: str
     token: str
-    header: dict[str, str]
+    header: dict
     payload: dict
     bits: int
     size: int

@@ -412,6 +412,11 @@ APP_CSS = """
       color: var(--fg-subtle);
       word-break: break-word;
     }
+    .token-source {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+      gap: 0 var(--space-3);
+    }
     .index-groups .eyebrow { margin-top: var(--space-3); }
     .index-groups .eyebrow:first-child { margin-top: 0; }
 
@@ -733,7 +738,21 @@ _CONSOLE_BODY = """  <header class="hero">
           <h2>Status list token</h2>
           <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
         </div>
-        <p class="jwt-legend">
+        <div class="token-source">
+          <div>
+            <label class="field-label" for="token-list">List shown</label>
+            <select id="token-list" class="explorer-select"></select>
+          </div>
+          <div>
+            <label class="field-label" for="token-format">Format</label>
+            <select id="token-format" class="explorer-select">
+              <option value="jwt" selected>JWT</option>
+              <option value="cwt">CWT</option>
+            </select>
+          </div>
+        </div>
+        <p class="lst-note mb-4" id="token-uri"></p>
+        <p class="jwt-legend" id="jwt-legend">
           <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
           <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
           <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
@@ -1020,6 +1039,7 @@ _CONSOLE_SCRIPT = """<script>
           });
           write(data);
           await load();
+          await refreshToken();
         };
       });
     }
@@ -1042,8 +1062,8 @@ _CONSOLE_SCRIPT = """<script>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
             <td>
               <div class="btn-row">
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-list="${escapeHtml(item.status_list_uri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
+                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-list="${escapeHtml(item.status_list_uri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
                 <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+jwt">ARL · JWT</button>
                 <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+cwt">ARL · CWT</button>
               </div>
@@ -1067,10 +1087,11 @@ _CONSOLE_SCRIPT = """<script>
             : await response.text();
           formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
           write(formatPreview);
-          // Keep the selected format in Output, while showing the same decoded
-          // status-list dissertation as the credentials token action.
-          renderDecodedToken(await jsonFetch("/debug/status-list"));
-          tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
+          // Token Status List previews decode that same list in the card;
+          // identifier lists have no lst, so the card keeps its current list.
+          if (button.dataset.media.startsWith("application/statuslist+")) {
+            await showSource(button.dataset.list, button.dataset.media.endsWith("+cwt") ? "cwt" : "jwt");
+          }
         };
       });
     }
@@ -1087,7 +1108,9 @@ _CONSOLE_SCRIPT = """<script>
           .filter((item) => item.verification_result)
           .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
       );
+      registryLists = lists;
       renderRegistry(lists);
+      renderSourceOptions();
       render();
     }
 
@@ -1135,8 +1158,8 @@ _CONSOLE_SCRIPT = """<script>
       await refreshToken(true);
     };
 
-    document.querySelector("#refresh").onclick = load;
-    document.querySelector("#registry-refresh").onclick = load;
+    document.querySelector("#refresh").onclick = async () => { await load(); await refreshToken(); };
+    document.querySelector("#registry-refresh").onclick = async () => { await load(); await refreshToken(); };
     document.querySelector("#all").onclick = () => {
       visibleRows = credentials.length;
       render();
@@ -1148,10 +1171,46 @@ _CONSOLE_SCRIPT = """<script>
     const tokenCard = document.querySelector("#token-card");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
+    const tokenList = document.querySelector("#token-list");
+    const tokenFormat = document.querySelector("#token-format");
+    const jwtLegend = document.querySelector("#jwt-legend");
     let currentToken = "";
+    // The list the token card decodes: `uri: null` is the legacy /status/1
+    // list; otherwise a country × doctype Token Status List URI.
+    let tokenSource = { uri: null, format: "jwt" };
+    let registryLists = [];
 
-    function renderJwt(token) {
-      const [header, payload, signature] = token.split(".");
+    function copyLabel() {
+      return tokenSource.format === "cwt" ? "Copy the CWT hex" : "Copy the JWT";
+    }
+
+    function debugUrl(offset = 0, limit = 100) {
+      const params = new URLSearchParams({ assignment_offset: offset, assignment_limit: limit, format: tokenSource.format });
+      if (tokenSource.uri) params.set("uri", tokenSource.uri);
+      return `/debug/status-list?${params}`;
+    }
+
+    function renderSourceOptions() {
+      if (tokenSource.uri && !registryLists.some((item) => item.status_list_uri === tokenSource.uri)) {
+        tokenSource = { uri: null, format: "jwt" };
+      }
+      tokenList.innerHTML = `<option value="">Legacy /status/1 (credentials)</option>` +
+        registryLists.map((item) => `<option value="${escapeHtml(item.status_list_uri)}">` +
+          `${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ${escapeHtml(item.list_id.slice(0, 8))} · ${item.revoked} revoked</option>`).join("");
+      tokenList.value = tokenSource.uri || "";
+      tokenFormat.value = tokenSource.format;
+      tokenFormat.disabled = !tokenSource.uri;
+      copyButton.textContent = copyLabel();
+    }
+
+    function renderToken(data) {
+      if (data.format === "cwt") {
+        jwtLegend.hidden = true;
+        jwtBox.innerHTML = `<span class="jwt-payload">${escapeHtml(data.token)}</span>`;
+        return;
+      }
+      jwtLegend.hidden = false;
+      const [header, payload, signature] = data.token.split(".");
       jwtBox.innerHTML =
         `<span class="jwt-header">${escapeHtml(header)}</span>` +
         `<span class="jwt-dot">.</span>` +
@@ -1184,7 +1243,7 @@ _CONSOLE_SCRIPT = """<script>
       previous.textContent = "Previous";
       previous.disabled = data.assignment_offset === 0;
       previous.onclick = async () => renderDecodedToken(await jsonFetch(
-        `/debug/status-list?assignment_offset=${Math.max(0, data.assignment_offset - data.assignment_limit)}&assignment_limit=${data.assignment_limit}`
+        debugUrl(Math.max(0, data.assignment_offset - data.assignment_limit), data.assignment_limit)
       ));
       const next = document.createElement("button");
       next.className = "btn btn-sm btn-outline";
@@ -1192,14 +1251,15 @@ _CONSOLE_SCRIPT = """<script>
       next.textContent = "Next";
       next.disabled = end >= data.assignment_total;
       next.onclick = async () => renderDecodedToken(await jsonFetch(
-        `/debug/status-list?assignment_offset=${data.assignment_offset + data.assignment_limit}&assignment_limit=${data.assignment_limit}`
+        debugUrl(data.assignment_offset + data.assignment_limit, data.assignment_limit)
       ));
       pagination.append(previous, next);
 
     }
     function renderDecodedToken(data) {
       currentToken = data.token;
-      renderJwt(data.token);
+      renderToken(data);
+      document.querySelector("#token-uri").textContent = data.uri;
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
@@ -1237,19 +1297,30 @@ _CONSOLE_SCRIPT = """<script>
         selection.addRange(range);
         copyButton.textContent = "Press ctrl+c";
       }
-      setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
+      setTimeout(() => { copyButton.textContent = copyLabel(); }, 2000);
     };
-    // Mutations change the list payload; always fetch a fresh decoded view.
+    // Mutations change the list payload; always re-fetch the decoded view of
+    // the list currently shown, so the token, spectrum and indices stay in
+    // step with every action.
     async function refreshToken(force = false) {
       if (tokenCard.hidden && !force) return;
-      renderDecodedToken(await jsonFetch("/debug/status-list"));
+      renderDecodedToken(await jsonFetch(debugUrl()));
     }
 
-    document.querySelector("#token").onclick = async () => {
-      const data = await jsonFetch("/debug/status-list");
-      renderDecodedToken(data);
-      write("Status list token fetched. The decoded token, status list and signing key are shown below the output.");
+    async function showSource(uri, format) {
+      tokenSource = { uri, format };
+      renderSourceOptions();
+      renderDecodedToken(await jsonFetch(debugUrl()));
       tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // The legacy /status/1 list is served as JWT only.
+    tokenList.onchange = () => showSource(tokenList.value || null, tokenList.value ? tokenFormat.value : "jwt");
+    tokenFormat.onchange = () => showSource(tokenSource.uri, tokenFormat.value);
+
+    document.querySelector("#token").onclick = async () => {
+      await showSource(tokenSource.uri, tokenSource.format);
+      write("Status list token fetched. The decoded token, status list and signing key are shown below the output.");
     };
 
     document.querySelector("#reset").onclick = async () => {

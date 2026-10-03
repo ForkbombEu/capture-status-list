@@ -1,12 +1,8 @@
 import os
-import zlib
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
-
-
-import jwt
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
@@ -20,6 +16,7 @@ from issuer import (
     credential_verification_result,
     debug_status_at,
     eudi_allocated_entries,
+    eudi_list_jwks,
     eudi_list_summaries,
     eudi_registry,
     eudi_status_at,
@@ -64,9 +61,7 @@ from status_list import (
     STATUS_INVALID,
     TOKEN_TTL_SECONDS,
     InvalidStatusListIndex,
-    base64url_decode,
     status_label,
-    unpack_status_values,
 )
 from status_list_explorer import ExplorerError, explore_status_list
 from ui import console_html, docs_html, explorer_html
@@ -490,61 +485,88 @@ def debug_status_list(
     response: Response,
     assignment_offset: int = 0,
     assignment_limit: int = 100,
+    uri: str | None = None,
+    format: str = "jwt",
 ) -> StatusListDebugResponse:
-    """Decode the current Status List Token for the debugger.
+    """Decode a Status List Token for the debugger.
 
-    The status spectrum is returned in full; credential assignment rows are
-    paginated so large fixtures do not require rendering every row at once.
+    Without `uri` this is the legacy `/status/1` list. With `uri` it is that
+    country × doctype Token Status List, in `format` (`jwt` or `cwt`, the CWT
+    returned as hex). The status spectrum is returned in full; credential
+    assignment rows are paginated so large fixtures stay renderable.
     """
     if assignment_offset < 0:
         raise HTTPException(status_code=400, detail="assignment_offset must be non-negative")
     if assignment_limit < 1 or assignment_limit > 500:
         raise HTTPException(status_code=400, detail="assignment_limit must be between 1 and 500")
-    token = generate_current_status_list_token()
-    header = jwt.get_unverified_header(token)
-    payload = jwt.decode(token, options={"verify_signature": False})
+    if format not in {"jwt", "cwt"}:
+        raise HTTPException(status_code=400, detail="format must be jwt or cwt")
 
-    status_list = payload["status_list"]
-    bits = status_list["bits"]
-    compressed = base64url_decode(status_list["lst"])
-    inflated = zlib.decompress(compressed)
-    statuses = unpack_status_values(inflated, bits=bits)
+    records = list_credential_records()
+    if uri is None:
+        if format != "jwt":
+            raise HTTPException(status_code=400, detail="the legacy /status/1 list is served as JWT only")
+        token: str | bytes = generate_current_status_list_token()
+        jwks = public_jwks()
+        subject = STATUS_LIST_URI
+        linked = [(record.credential_id, record.idx) for record in records]
+    else:
+        try:
+            token, media_type, _ = build_eudi_token(uri, format)
+            jwks = eudi_list_jwks(uri)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not media_type.startswith("application/statuslist+"):
+            raise HTTPException(status_code=400, detail="uri must name a token status list")
+        subject = uri
+        linked = sorted(
+            (
+                (record.credential_id, record.eudi_idx)
+                for record in records
+                if record.eudi_status_list_uri == uri and record.eudi_idx is not None
+            ),
+            key=lambda item: item[1],
+        )
+
+    token_text = token.hex() if isinstance(token, bytes) else token
+    explored = explore_status_list(token_text)
+    statuses = explored.statuses
     revoked_indices = [
         idx for idx, value in enumerate(statuses) if value == STATUS_INVALID
     ]
-    records = list_credential_records()
-    assignment_total = len(records)
     assignments = [
         StatusListAssignment(
-            idx=record.idx,
-            credential_id=record.credential_id,
-            status=status_label(statuses[record.idx]),
+            idx=idx,
+            credential_id=credential_id,
+            status=status_label(statuses[idx]),
         )
-        for record in records[assignment_offset : assignment_offset + assignment_limit]
+        for credential_id, idx in linked[assignment_offset : assignment_offset + assignment_limit]
     ]
 
     response.headers["Cache-Control"] = "no-store"
     return StatusListDebugResponse(
-        token=token,
-        header=header,
-        payload=payload,
-        bits=bits,
+        uri=subject,
+        format=format,
+        token=token_text,
+        header=explored.header,
+        payload=explored.payload,
+        bits=explored.bits,
         size=len(statuses),
         valid=len(statuses) - len(revoked_indices),
         revoked=len(revoked_indices),
         revoked_indices=revoked_indices,
         lst=_status_list_bits(
             statuses,
-            bits=bits,
-            compressed_bytes=len(compressed),
-            inflated_bytes=len(inflated),
-            around=[record.idx for record in records],
+            bits=explored.bits,
+            compressed_bytes=explored.compressed_bytes,
+            inflated_bytes=explored.inflated_bytes,
+            around=[idx for _, idx in linked],
         ),
         assignments=assignments,
         assignment_offset=assignment_offset,
         assignment_limit=assignment_limit,
-        assignment_total=assignment_total,
-        jwks=public_jwks(),
+        assignment_total=len(linked),
+        jwks=jwks,
     )
 
 

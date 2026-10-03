@@ -267,3 +267,66 @@ def test_local_mode_tokens_carry_x5c_and_verify_end_to_end(monkeypatch) -> None:
         local_path(uri), headers={"Accept": "application/statuslist+jwt"}
     ).text
     assert check_status(idx, revoked, expected_subject=uri) == "REVOKED"
+
+
+def test_debug_view_decodes_an_api_allocated_list_in_jwt_and_cwt() -> None:
+    references = [take()["status_list"] for _ in range(3)]
+    uri = references[0]["uri"]
+    for reference in references[:2]:
+        client.post(
+            "/token_status_list/set",
+            headers={"X-Api-Key": "test"},
+            data={"uri": uri, "idx": str(reference["idx"]), "status": "1"},
+        )
+    expected = sorted(reference["idx"] for reference in references[:2])
+
+    as_jwt = client.get("/debug/status-list", params={"uri": uri}).json()
+    as_cwt = client.get("/debug/status-list", params={"uri": uri, "format": "cwt"}).json()
+
+    for decoded in (as_jwt, as_cwt):
+        assert decoded["uri"] == uri
+        assert decoded["revoked_indices"] == expected
+        assert decoded["assignments"] == []
+        assert decoded["jwks"]["keys"][0]["kid"] == "EU-status-list"
+    assert as_jwt["payload"]["sub"] == uri
+    assert as_jwt["header"]["kid"] == "EU-status-list"
+    served = client.get(local_path(uri), headers={"Accept": "application/statuslist+cwt"}).content
+    assert decode_cwt(bytes.fromhex(as_cwt["token"]), public_key_pem())[1][2] == uri
+    assert decode_cwt(served, public_key_pem())[1][65533] == decode_cwt(
+        bytes.fromhex(as_cwt["token"]), public_key_pem()
+    )[1][65533]
+    # The legacy list is a different list: API revocations never reach it.
+    assert client.get("/debug/status-list").json()["revoked_indices"] == []
+
+
+def test_debug_view_links_batch_credentials_to_their_registry_index() -> None:
+    created = client.post(
+        "/credentials/random-batch",
+        json={"count": 2, "prefix": "tie", "country": "EU", "doctype": "org.iso.18013.5.1.mDL"},
+    ).json()["created"]
+    client.post("/credentials/revoke-batch", json={"credential_ids": [created[0]["credential_id"]]})
+    uri = client.get("/debug/status-lists").json()[0]["status_list_uri"]
+
+    decoded = client.get("/debug/status-list", params={"uri": uri}).json()
+
+    statuses = {item["credential_id"]: item["status"] for item in decoded["assignments"]}
+    assert statuses == {created[0]["credential_id"]: "REVOKED", created[1]["credential_id"]: "VALID"}
+    assert len(decoded["revoked_indices"]) == 1
+    assert decoded["assignment_total"] == 2
+
+
+def test_debug_view_rejects_unknown_lists_and_identifier_lists() -> None:
+    reference = take()
+
+    unknown = client.get(
+        "/debug/status-list",
+        params={"uri": reference["status_list"]["uri"][:-4] + "0000"},
+    )
+    identifier = client.get(
+        "/debug/status-list", params={"uri": reference["identifier_list"]["uri"]}
+    )
+    legacy_cwt = client.get("/debug/status-list", params={"format": "cwt"})
+
+    assert unknown.status_code == 404
+    assert identifier.status_code == 400
+    assert legacy_cwt.status_code == 400

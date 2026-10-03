@@ -318,16 +318,43 @@ def eudi_allocated_entries():
     return eudi_registry.allocated_entries()
 
 
-def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
-    kind, state = eudi_registry.get_by_uri(uri)
-    material = material_for(state.country)
+def _eudi_signing_pem(material) -> str:
     try:
-        private_pem = material.private_pem
+        return material.private_pem
     except FileNotFoundError:
         # Local/CI debugger runs may not have operator country keys mounted.
         # Reuse the ignored legacy test key rather than failing a public test
         # endpoint; production deployments should provide EUDI_KEY_DIR.
-        private_pem = key_store.private_pem()
+        return key_store.private_pem()
+
+
+def eudi_list_jwks(uri: str) -> dict[str, list[dict[str, str]]]:
+    """Public JWKS for the key that signs the country × doctype list at ``uri``."""
+    _, state = eudi_registry.get_by_uri(uri)
+    material = material_for(state.country)
+    private_key = serialization.load_pem_private_key(
+        _eudi_signing_pem(material).encode("ascii"), password=None
+    )
+    numbers = private_key.public_key().public_numbers()
+    return {
+        "keys": [
+            {
+                "kty": "EC",
+                "crv": "P-256",
+                "kid": material.kid,
+                "use": "sig",
+                "alg": "ES256",
+                "x": _base64url_uint(numbers.x, 32),
+                "y": _base64url_uint(numbers.y, 32),
+            }
+        ]
+    }
+
+
+def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
+    kind, state = eudi_registry.get_by_uri(uri)
+    material = material_for(state.country)
+    private_pem = _eudi_signing_pem(material)
     certificate = material.certificate_der
     now = int(time.time())
     if kind == TOKEN_LIST_KIND:

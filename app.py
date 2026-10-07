@@ -33,6 +33,7 @@ from issuer import (
     reset_eudi_registry,
     reset_state,
     set_eudi_status,
+    status_list_uris,
     take_eudi_reference,
     revoke_credential_record,
 )
@@ -52,6 +53,7 @@ from models import (
     RandomBatchCreateRequest,
     RandomBatchCreateResponse,
     ResetResponse,
+    StatusListAggregationResponse,
     StatusListAssignment,
     StatusListBits,
     StatusListDebugResponse,
@@ -416,6 +418,18 @@ async def set_identifier_status(request: Request) -> PlainTextResponse:
 @app.get("/debug/status-lists")
 def debug_status_lists() -> list[dict]:
     return [asdict(summary) for summary in eudi_list_summaries()]
+
+@app.get("/token_status_list/aggregation", response_model=StatusListAggregationResponse)
+def status_list_aggregation(response: Response) -> StatusListAggregationResponse:
+    """Status List Aggregation (draft-ietf-oauth-status-list-21, section 9).
+
+    Lists every Status List Token URI this issuer serves: the legacy `/status/1`
+    list and each allocated country × doctype pool. Status List Tokens carry
+    this URI in their `aggregation_uri` claim.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return StatusListAggregationResponse(status_lists=status_list_uris())
+
 
 
 @app.post("/debug/status-lists/expire")

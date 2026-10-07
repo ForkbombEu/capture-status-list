@@ -85,7 +85,9 @@ def test_status_list_has_no_personal_identifiers() -> None:
     status_list = payload["status_list"]
     serialized_status_list = str(status_list).lower()
 
-    assert set(status_list) == {"bits", "lst"}
+    # Draft section 4.2 allows bits, lst and the optional aggregation_uri; the
+    # list itself must carry no personal identifiers.
+    assert {"bits", "lst"} <= set(status_list) <= {"bits", "lst", "aggregation_uri"}
     assert "name" not in serialized_status_list
     assert "email" not in serialized_status_list
     assert "date_of_birth" not in serialized_status_list

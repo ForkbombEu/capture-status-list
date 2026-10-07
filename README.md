@@ -27,6 +27,12 @@ Implemented status-list format:
 
 - IETF Token Status List, `draft-ietf-oauth-status-list-21`:
   https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/
+- Status List Aggregation, same draft section 9: the issuer publishes the URIs
+  of all its Status List Tokens as `{"status_lists": [...]}` and each token
+  points at that document with the optional `status_list.aggregation_uri` claim
+  (draft section 4.2/4.3). Several lists are the expected deployment: the draft
+  lets an issuer split entries per lifecycle, expiry or ecosystem, and a
+  Referenced Token always names its own list by `uri` plus `idx`.
 - Commission Implementing Regulation (EU) 2024/2977, as amended by Commission
   Implementing Regulation (EU) 2026/1731, for the EUDI use case expectation that
   Token Status Lists are used for wallet instance attestation and key
@@ -249,6 +255,25 @@ curl -X POST http://localhost:8000/token_status_list/set \
   --data-urlencode uri='<status-list-uri>' \
   --data-urlencode idx=123 \
   --data-urlencode status=1
+```
+
+`GET /token_status_list/aggregation` publishes this issuer's Status List
+Aggregation (draft section 9): the legacy `/status/1` list plus every allocated
+pool, in one `application/json` document, so a wallet can prefetch every list
+before matching the URI it was handed. Every Status List Token this server signs
+carries that URI in its `status_list.aggregation_uri` claim:
+
+```sh
+curl http://localhost:8000/token_status_list/aggregation
+```
+
+```json
+{
+  "status_lists": [
+    "http://localhost:8000/status/1",
+    "http://localhost:8000/token_status_list/EU/org.iso.18013.5.1.mDL/<uuid>"
+  ]
+}
 ```
 
 `GET /token_status_list/get` and `GET /identifier_list/get` expose raw indexed

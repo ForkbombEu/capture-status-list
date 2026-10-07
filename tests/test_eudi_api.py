@@ -366,3 +366,70 @@ def test_debug_status_list_rejects_unknown_and_identifier_lists() -> None:
         ).status_code
         == 400
     )
+
+
+def _issuer_base(reference: dict) -> str:
+    return reference["status_list"]["uri"].rsplit("/token_status_list/", 1)[0]
+
+
+def test_status_list_aggregation_lists_every_status_list_token() -> None:
+    reference = take()
+
+    aggregation = client.get("/token_status_list/aggregation")
+
+    assert aggregation.status_code == 200
+    assert aggregation.headers["content-type"].startswith("application/json")
+    assert aggregation.headers["cache-control"] == "no-store"
+    assert aggregation.json() == {
+        "status_lists": [
+            f"{_issuer_base(reference)}/status/1",
+            reference["status_list"]["uri"],
+        ]
+    }
+    # Identifier lists are not Status List Tokens and must not be advertised.
+    assert reference["identifier_list"]["uri"] not in aggregation.json()["status_lists"]
+    # Every advertised URI has to resolve to a Status List Token.
+    for uri in aggregation.json()["status_lists"]:
+        assert (
+            client.get(
+                local_path(uri), headers={"accept": "application/statuslist+jwt"}
+            ).status_code
+            == 200
+        )
+
+
+def test_status_list_tokens_advertise_the_aggregation_uri() -> None:
+    reference = take()
+    aggregation_uri = f"{_issuer_base(reference)}/token_status_list/aggregation"
+
+    legacy = jwt.decode(
+        client.get(
+            "/status/1", headers={"accept": "application/statuslist+jwt"}
+        ).text,
+        options={"verify_signature": False},
+    )
+    pool = jwt.decode(
+        client.get(
+            local_path(reference["status_list"]["uri"]),
+            headers={"accept": "application/statuslist+jwt"},
+        ).text,
+        options={"verify_signature": False},
+    )
+    for payload in (legacy, pool):
+        assert payload["status_list"]["aggregation_uri"] == aggregation_uri
+
+    cwt = client.get(
+        local_path(reference["status_list"]["uri"]),
+        headers={"accept": "application/statuslist+cwt"},
+    ).content
+    _, cwt_payload = decode_cwt(cwt, public_key_pem())
+    assert cwt_payload[65533]["aggregation_uri"] == aggregation_uri
+
+    identifier_list = jwt.decode(
+        client.get(
+            local_path(reference["identifier_list"]["uri"]),
+            headers={"accept": "application/identifierlist+jwt"},
+        ).text,
+        options={"verify_signature": False},
+    )
+    assert "aggregation_uri" not in identifier_list["identifier_list"]

@@ -75,6 +75,12 @@ class StatusListTakeResponse(BaseModel):
     identifier_list: IdentifierListReference
 
 
+class StatusListAggregationResponse(BaseModel):
+    """Status List Aggregation (draft-ietf-oauth-status-list-21, section 9)."""
+
+    status_lists: list[str]
+
+
 class RandomBatchCreateResponse(BaseModel):
     created: list[CredentialResponse]
 

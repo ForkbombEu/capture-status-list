@@ -582,6 +582,7 @@ _FOOTER = f"""  <footer class="footer">
           <div class="footer-col">
             <a href="/token_status_list/take">Status list API</a>
             <a href="/status/1">Legacy status list token</a>
+            <a href="/token_status_list/aggregation">Status list aggregation</a>
             <a href="/.well-known/jwks.json">JWKS</a>
             <a href="/docs">API docs</a>
             <a href="https://github.com/ForkbombEu/capture-status-list"

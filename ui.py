@@ -181,6 +181,11 @@ APP_CSS = """
       color: var(--brand-primary);
     }
     .btn-secondary:hover { background: var(--brand-secondary-strong); }
+    .btn-success {
+      background: var(--success);
+      color: var(--fg-on-primary);
+    }
+    .btn-success:hover { background: var(--success-border); }
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .btn-stack { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
     .btn-row .btn, .btn-stack .btn { justify-content: center; }
@@ -453,6 +458,19 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
+    /* The status-list card decodes one list at a time: the picker names the
+       legacy credential list and every allocated country × doctype pool. */
+    .list-picker { display: flex; align-items: center; gap: var(--space-3); }
+    #lst-select {
+      height: 36px;
+      max-width: 340px;
+      padding: 0 var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--bg);
+      color: var(--fg);
+      font: var(--fs-sm) var(--font-sans);
+    }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -569,6 +587,7 @@ _FOOTER = f"""  <footer class="footer">
           <div class="footer-col">
             <a href="/token_status_list/take">Status list API</a>
             <a href="/status/1">Legacy status list token</a>
+            <a href="/token_status_list/aggregation">Status list aggregation</a>
             <a href="/.well-known/jwks.json">JWKS</a>
             <a href="/docs">API docs</a>
             <a href="https://github.com/ForkbombEu/capture-status-list"
@@ -631,8 +650,56 @@ _CONSOLE_BODY = """  <header class="hero">
     <div class="container">
     <div class="console-grid">
       <div class="stack console-left">
-      <section class="card batch-card">
-        <div class="section-header"><h2>Add batch</h2></div>
+      <section class="card" id="registry-card">
+        <div class="section-header">
+          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
+          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
+        </div>
+        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Choose the list to operate on: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
+        <div class="list-picker mt-4">
+          <label class="field-label" for="lst-select">Operate on</label>
+          <select id="lst-select" aria-label="Status list to operate on"></select>
+          <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
+        </div>
+        <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
+        <div id="new-list-form" class="mt-4" hidden>
+          <div class="batch-fields">
+            <div>
+              <label class="field-label" for="new-country">Country</label>
+              <input id="new-country" type="text" value="EU" maxlength="16">
+            </div>
+            <div>
+              <label class="field-label" for="new-doctype">Doctype</label>
+              <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+            </div>
+            <div>
+              <label class="field-label" for="new-expiry">List expiry</label>
+              <input id="new-expiry" type="date" value="2099-12-31">
+            </div>
+          </div>
+          <div class="btn-row mt-4">
+            <button id="new-list" class="btn btn-md btn-success">Create status list</button>
+            <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
+          </div>
+        </div>
+        <div class="test-table-wrap mt-4">
+          <table class="test-table">
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
+            <tbody id="registry-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card batch-card" id="legacy-card" hidden>
+        <div class="section-header">
+          <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
+          <div class="btn-row">
+            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
+            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
+            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+          </div>
+        </div>
+        <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
         <div class="batch-fields">
           <div>
             <label class="field-label" for="count">Count</label>
@@ -655,33 +722,8 @@ _CONSOLE_BODY = """  <header class="hero">
             <input id="expiry-date" type="date" value="2099-12-31">
           </div>
         </div>
-        <div class="btn-row mt-4">
+        <div class="btn-row mt-4 mb-4">
           <button id="create" class="btn btn-md btn-primary">Create random batch</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-header">
-          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
-          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
-        </div>
-        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>.</p>
-        <div class="test-table-wrap">
-          <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th><th>Token formats</th></tr></thead>
-            <tbody id="registry-rows"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-header">
-          <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
-          <div class="btn-row">
-            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
-            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
-            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
-          </div>
         </div>
         <div class="btn-row mb-4">
           <button id="all" class="btn btn-sm btn-outline">Select all</button>
@@ -705,11 +747,26 @@ _CONSOLE_BODY = """  <header class="hero">
             </table>
           </div>
         </div>
+      </section>
 
-        <div class="section-header mt-4">
-          <h3>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
+      <section class="card" id="allocation-card" hidden>
+        <div class="section-header">
+          <h2>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h2>
         </div>
-        <p class="text-sm text-muted">These entries are allocated by the status-list service. They identify a country, doctype, list and index, but do not include a credential identifier. Revoke an entry directly from this test dashboard.</p>
+        <p class="text-sm text-muted">Entries of the working list. They identify a country, doctype, list and index, but carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
+        <div class="batch-fields">
+          <div>
+            <label class="field-label" for="entries-count">Count</label>
+            <input id="entries-count" type="number" min="1" max="500" value="10">
+          </div>
+          <div>
+            <label class="field-label" for="entries-expiry">List expiry</label>
+            <input id="entries-expiry" type="date" value="2099-12-31">
+          </div>
+        </div>
+        <div class="btn-row mt-4 mb-4">
+          <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
+        </div>
         <div class="credential-scroll">
           <div class="test-table-wrap">
             <table class="test-table">
@@ -733,6 +790,7 @@ _CONSOLE_BODY = """  <header class="hero">
           <h2>Status list token</h2>
           <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
         </div>
+        <p class="text-sm text-muted" id="lst-scope"></p>
         <p class="jwt-legend">
           <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
           <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
@@ -801,7 +859,7 @@ _CONSOLE_BODY = """  <header class="hero">
         <div class="btn-row mt-4" id="assignment-pagination"></div>
 
         <h3 class="subhead">Signing key</h3>
-        <p class="eyebrow">JWKS · /.well-known/jwks.json</p>
+        <p class="eyebrow" id="jwks-label">JWKS · /.well-known/jwks.json</p>
         <pre id="jwks"></pre>
       </section>
 
@@ -930,6 +988,8 @@ _CONSOLE_SCRIPT = """<script>
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
+    let allocations = [];
+    let registry = [];
 
     function selectedIds() {
       return [...document.querySelectorAll("tbody input:checked")]
@@ -939,6 +999,16 @@ _CONSOLE_SCRIPT = """<script>
 
     function write(value) {
       out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    }
+
+    // Every dashboard fetch reports failures in Output: an unhandled rejection
+    // would leave the operator with a stale table and no explanation.
+    async function guard(action) {
+      try {
+        await action();
+      } catch (error) {
+        write(error);
+      }
     }
 
     async function jsonFetch(url, options = {}) {
@@ -992,7 +1062,12 @@ _CONSOLE_SCRIPT = """<script>
       };
     }
 
-    function renderAllocations(entries) {
+    function renderAllocations() {
+      // The table is the working list's own inventory: a legacy context has no
+      // allocated entries, a pool context shows exactly that pool's entries.
+      const entries = activeListUri
+        ? allocations.filter((item) => item.status_list_uri === activeListUri)
+        : [];
       allocationCount.textContent = entries.length;
       allocationRows.innerHTML = entries.length
         ? entries.map((item) => {
@@ -1005,12 +1080,16 @@ _CONSOLE_SCRIPT = """<script>
               <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
               <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${status}</span></td>
               <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
-              <td><button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke ${escapeHtml(item.country)} ${escapeHtml(item.doctype)} entry ${item.idx}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button></td>
+              <td>
+                <div class="btn-row">
+                  <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke ${escapeHtml(item.country)} ${escapeHtml(item.doctype)} entry ${item.idx}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button>
+                </div>
+              </td>
             </tr>`;
           }).join("")
-        : `<tr class="empty-row"><td colspan="7">No status-list entries allocated yet.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="7">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
       allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
-        button.onclick = async () => {
+        button.onclick = () => guard(async () => {
           const data = await jsonFetch("/dashboard/allocated-entries/revoke", {
             method: "POST",
             body: JSON.stringify({
@@ -1020,95 +1099,121 @@ _CONSOLE_SCRIPT = """<script>
           });
           write(data);
           await load();
-        };
+          await refreshCard();
+        });
       });
     }
 
-    let formatPreview = null;
+    // The registry renders the list summaries: inventory only, the picker chooses.
 
-    function renderRegistry(lists) {
-      registryCount.textContent = lists.length;
-      const sameOrigin = (uri) => uri.replace(/^https?:\\/\\/[^/]+/, window.location.origin);
-      registryRows.innerHTML = lists.length
-        ? lists.map((item) => {
-            const tokenUri = sameOrigin(item.status_list_uri);
-            const identifierUri = sameOrigin(item.identifier_list_uri);
-            return `<tr>
+    function renderRegistry(summaries) {
+      registryCount.textContent = summaries.length;
+      // Pure inventory: the picker above chooses the list to operate on.
+      registryRows.innerHTML = summaries.length
+        ? summaries.map((item) => `<tr>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
             <td>${item.allocated}</td><td>${item.revoked}</td>
             <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
-            <td>
-              <div class="btn-row">
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+jwt">ARL · JWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+cwt">ARL · CWT</button>
-              </div>
-            </td>
-          </tr>`;
-          }).join("")
-        : `<tr class="empty-row"><td colspan="8">No country × doctype lists allocated yet.</td></tr>`;
-      registryRows.querySelectorAll("button[data-preview]").forEach((button) => {
-        button.onclick = async () => {
-          const response = await fetch(button.dataset.preview, {
-            cache: "no-store",
-            headers: { Accept: button.dataset.media },
-          });
-          if (!response.ok) {
-            write(`Token fetch failed: ${response.status}`);
-            return;
-          }
-          const type = response.headers.get("content-type") || "";
-          const body = type.includes("cwt")
-            ? [...new Uint8Array(await response.arrayBuffer())]
-            : await response.text();
-          formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
-          write(formatPreview);
-          // Keep the selected format in Output, while showing the same decoded
-          // status-list dissertation as the credentials token action.
-          renderDecodedToken(await jsonFetch("/debug/status-list"));
-          tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-        };
-      });
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
     }
 
     async function load() {
-      const [data, lists] = await Promise.all([
+      const [data, summaries] = await Promise.all([
         jsonFetch("/credentials"),
         jsonFetch("/debug/status-lists"),
       ]);
       credentials = data.credentials;
-      renderAllocations(data.allocated_entries);
+      allocations = data.allocated_entries;
+      registry = summaries;
       verification = Object.fromEntries(
         credentials
           .filter((item) => item.verification_result)
           .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
       );
-      renderRegistry(lists);
+      renderRegistry(registry);
+      renderListOptions(registry);
+      if (
+        contextChosen &&
+        activeListUri &&
+        !registry.some((item) => item.status_list_uri === activeListUri)
+      ) {
+        clearList();           // the pool is gone: state was reset or the server reloaded
+        return;
+      }
+      listSelect.value = contextChosen ? activeListUri || "legacy" : "none";
+      renderPanels();
+      renderContext();
       render();
     }
 
-    document.querySelector("#create").onclick = async () => {
-      const body = {
-        count: Number(document.querySelector("#count").value || 10),
-        prefix: document.querySelector("#prefix").value || "cred",
-        country: document.querySelector("#country").value || "EU",
-        doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
-        expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
-      };
+    // The credentials panel owns the credential batch: /status/1 credentials,
+    // each one paired with an entry in the country × doctype pool of the form.
+    document.querySelector("#create").onclick = () => guard(async () => {
       const data = await jsonFetch("/credentials/random-batch", {
         method: "POST",
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          count: Number(document.querySelector("#count").value || 10),
+          prefix: document.querySelector("#prefix").value || "cred",
+          country: document.querySelector("#country").value || "EU",
+          doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
+          expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
+        }),
       });
       write(data);
       await load();
-      await refreshToken(true);
-    };
+      await refreshCard();
+    });
 
-    document.querySelector("#revoke").onclick = async () => {
+    // The allocated-entry panel owns its pool's top-up: entries only.
+    document.querySelector("#add-entries").onclick = () => guard(async () => {
+      const pool = workingPool();
+      if (!pool) return write("Operate on an allocated pool first.");
+      const data = await jsonFetch("/dashboard/status-lists", {
+        method: "POST",
+        body: JSON.stringify({
+          country: pool.country,
+          doctype: pool.doctype,
+          expiry_date: document.querySelector("#entries-expiry").value || pool.expires,
+          count: Number(document.querySelector("#entries-count").value || 10),
+        }),
+      });
+      write(data);
+      await load();
+      await refreshCard();
+    });
+
+    const newListForm = document.querySelector("#new-list-form");
+    const newListToggle = document.querySelector("#new-list-toggle");
+    function showNewListForm(visible) {
+      newListForm.hidden = !visible;
+      newListToggle.setAttribute("aria-expanded", String(visible));
+      if (visible) document.querySelector("#new-country").focus();
+    }
+
+    newListToggle.onclick = () => showNewListForm(newListForm.hidden);
+    document.querySelector("#new-list-cancel").onclick = () => showNewListForm(false);
+
+    document.querySelector("#new-list").onclick = () => guard(async () => {
+      const data = await jsonFetch("/dashboard/status-lists", {
+        method: "POST",
+        body: JSON.stringify({
+          country: document.querySelector("#new-country").value || "EU",
+          doctype: document.querySelector("#new-doctype").value || "org.iso.18013.5.1.mDL",
+          expiry_date: document.querySelector("#new-expiry").value || "2099-12-31",
+          count: 1,
+        }),
+      });
+      write(data);
+      showNewListForm(false);
+      await load();
+      await selectList(data.status_list_uri);
+    });
+
+    document.querySelector("#revoke").onclick = () => guard(async () => {
       const ids = selectedIds();
       if (!ids.length) return write("Select credentials first.");
       const data = await jsonFetch("/credentials/revoke-batch", {
@@ -1117,10 +1222,10 @@ _CONSOLE_SCRIPT = """<script>
       });
       write(data);
       await load();
-      await refreshToken(true);
-    };
+      await refreshCard();
+    });
 
-    document.querySelector("#verify").onclick = async () => {
+    document.querySelector("#verify").onclick = () => guard(async () => {
       const ids = selectedIds();
       if (!ids.length) return write("Select credentials first.");
       const data = await jsonFetch("/verify-batch", {
@@ -1132,11 +1237,11 @@ _CONSOLE_SCRIPT = """<script>
       }
       write(data);
       render();
-      await refreshToken(true);
-    };
+      await refreshCard();
+    });
 
-    document.querySelector("#refresh").onclick = load;
-    document.querySelector("#registry-refresh").onclick = load;
+    document.querySelector("#refresh").onclick = () => guard(load);
+    document.querySelector("#registry-refresh").onclick = () => guard(load);
     document.querySelector("#all").onclick = () => {
       visibleRows = credentials.length;
       render();
@@ -1146,9 +1251,102 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelectorAll("tbody input").forEach((box) => { box.checked = false; });
     };
     const tokenCard = document.querySelector("#token-card");
+    const registryCard = document.querySelector("#registry-card");
+    const legacyCard = document.querySelector("#legacy-card");
+    const allocationCard = document.querySelector("#allocation-card");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
+    const listSelect = document.querySelector("#lst-select");
     let currentToken = "";
+
+    // The working list the whole console is scoped to. Nothing is selected
+    // until the operator picks one; null then means the legacy /status/1 list.
+    let activeListUri = null;
+    let contextChosen = false;
+
+    // Option labels carry the revoked count: the operator sees at a glance
+    // which of the registered lists the revocation landed in.
+    function renderListOptions(summaries) {
+      listSelect.innerHTML = [
+        '<option value="none">Pick a status list…</option>',
+        '<option value="legacy">Legacy /status/1 · credential list</option>',
+        ...summaries.map((item) => `<option value="${escapeHtml(item.status_list_uri)}">` +
+          `${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ` +
+          `${escapeHtml(item.list_id.slice(0, 8))} · ${item.revoked} revoked</option>`),
+      ].join("");
+    }
+
+    function statusListUrl(uri, offset, limit) {
+      const params = new URLSearchParams({
+        assignment_offset: String(offset),
+        assignment_limit: String(limit),
+      });
+      if (uri) params.set("uri", uri);
+      return `/debug/status-list?${params}`;
+    }
+
+    // Decoding never changes the working list: the card always shows it.
+    async function showCard(uri, offset = 0, limit = 100) {
+      const data = await jsonFetch(statusListUrl(uri, offset, limit));
+      renderDecodedToken(data);
+      return data;
+    }
+
+    async function refreshCard() {
+      if (!contextChosen || tokenCard.hidden) return;
+      await showCard(activeListUri);
+    }
+
+    function contextLabel() {
+      return activeListUri || "the legacy /status/1 list";
+    }
+
+    // The registry stays on screen: it is both the inventory and the chooser.
+    // The other panels follow the chosen list, one kind at a time.
+    function renderPanels() {
+      const pool = Boolean(activeListUri);
+      legacyCard.hidden = !contextChosen || pool;
+      allocationCard.hidden = !contextChosen || !pool;
+    }
+
+    function workingPool() {
+      return registry.find((item) => item.status_list_uri === activeListUri) || null;
+    }
+
+    function renderContext() {
+      const pool = registry.find((item) => item.status_list_uri === activeListUri);
+      document.querySelector("#ctx-scope").textContent = !contextChosen
+        ? "No list selected yet: choose one above to operate on it."
+        : activeListUri
+          ? `Working on ${activeListUri} — ${pool.allocated} allocated, ${pool.revoked} revoked, ${pool.expired ? "expired" : "active"}.`
+          : "Working on the legacy /status/1 credential list.";
+      renderAllocations();
+    }
+
+    // The single context switch: pick a list, then read its signed token.
+    async function selectList(uri) {
+      contextChosen = true;
+      activeListUri = uri;
+      listSelect.value = uri || "legacy";
+      renderPanels();
+      renderContext();
+      await showCard(uri);
+    }
+
+    function clearList() {
+      contextChosen = false;
+      activeListUri = null;
+      listSelect.value = "none";
+      tokenCard.hidden = true;
+      renderPanels();
+      renderContext();
+    }
+
+    listSelect.onchange = () => guard(async () => {
+      const value = listSelect.value;
+      if (!value || value === "none") return clearList();
+      await selectList(value === "legacy" ? null : value);
+    });
 
     function renderJwt(token) {
       const [header, payload, signature] = token.split(".");
@@ -1168,7 +1366,7 @@ _CONSOLE_SCRIPT = """<script>
             <td class="cell-mono">${item.idx}</td>
             <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
           </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">No credential is assigned to an index yet.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="3">${activeListUri ? "This list is allocated through the status-list API; its entries carry no credential identifier." : "No credential is assigned to an index yet."}</td></tr>`;
       const pagination = document.querySelector("#assignment-pagination");
       pagination.innerHTML = "";
       if (data.assignment_total <= data.assignment_limit) return;
@@ -1183,16 +1381,20 @@ _CONSOLE_SCRIPT = """<script>
       previous.type = "button";
       previous.textContent = "Previous";
       previous.disabled = data.assignment_offset === 0;
-      previous.onclick = async () => renderDecodedToken(await jsonFetch(
-        `/debug/status-list?assignment_offset=${Math.max(0, data.assignment_offset - data.assignment_limit)}&assignment_limit=${data.assignment_limit}`
+      previous.onclick = () => guard(() => showCard(
+        activeListUri,
+        Math.max(0, data.assignment_offset - data.assignment_limit),
+        data.assignment_limit,
       ));
       const next = document.createElement("button");
       next.className = "btn btn-sm btn-outline";
       next.type = "button";
       next.textContent = "Next";
       next.disabled = end >= data.assignment_total;
-      next.onclick = async () => renderDecodedToken(await jsonFetch(
-        `/debug/status-list?assignment_offset=${data.assignment_offset + data.assignment_limit}&assignment_limit=${data.assignment_limit}`
+      next.onclick = () => guard(() => showCard(
+        activeListUri,
+        data.assignment_offset + data.assignment_limit,
+        data.assignment_limit,
       ));
       pagination.append(previous, next);
 
@@ -1200,6 +1402,11 @@ _CONSOLE_SCRIPT = """<script>
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
+      document.querySelector("#lst-scope").textContent =
+        `Working list: ${data.list_uri}`;
+      document.querySelector("#jwks-label").textContent = activeListUri
+        ? "JWKS · list signer certificate"
+        : "JWKS · /.well-known/jwks.json";
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
@@ -1239,26 +1446,22 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-    // Mutations change the list payload; always fetch a fresh decoded view.
-    async function refreshToken(force = false) {
-      if (tokenCard.hidden && !force) return;
-      renderDecodedToken(await jsonFetch("/debug/status-list"));
-    }
-
-    document.querySelector("#token").onclick = async () => {
-      const data = await jsonFetch("/debug/status-list");
-      renderDecodedToken(data);
-      write("Status list token fetched. The decoded token, status list and signing key are shown below the output.");
+    document.querySelector("#token").onclick = () => guard(async () => {
+      await showCard(activeListUri);
+      write(
+        `Status list token fetched for ${contextLabel()}. ` +
+        "The decoded token, status list and signing key are shown below the output.",
+      );
       tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    };
+    });
 
-    document.querySelector("#reset").onclick = async () => {
+    document.querySelector("#reset").onclick = () => guard(async () => {
       const data = await jsonFetch("/reset", { method: "POST" });
       verification = {};
       write(data);
-      await load();
-      await refreshToken(true);
-    };
+      await load();          // every pool is gone: the context falls back
+      await refreshCard();
+    });
 
     load().catch(write);
   </script>"""
@@ -1450,12 +1653,18 @@ _EXPLORER_SCRIPT = """<script>
     async function inspect() {
       const payload = payloadInput.value.trim();
       if (!payload) return void (explorerOut.textContent = "Paste a payload first.");
-      const response = await fetch("/debug/status-list/explore", {
-        method: "POST",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ payload, bits: Number(document.querySelector("#explore-bits").value) }),
-      });
+      let response;
+      try {
+        response = await fetch("/debug/status-list/explore", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload, bits: Number(document.querySelector("#explore-bits").value) }),
+        });
+      } catch (error) {
+        explorerOut.textContent = String(error);
+        return;
+      }
       const body = await response.json();
       if (!response.ok) {
         exploreCard.hidden = true;
@@ -1485,7 +1694,13 @@ _EXPLORER_SCRIPT = """<script>
     };
 
     document.querySelector("#explore-current").onclick = async () => {
-      const response = await fetch("/status/1", { cache: "no-store", headers: { accept: "application/statuslist+jwt" } });
+      let response;
+      try {
+        response = await fetch("/status/1", { cache: "no-store", headers: { accept: "application/statuslist+jwt" } });
+      } catch (error) {
+        explorerOut.textContent = String(error);
+        return;
+      }
       payloadInput.value = await response.text();
       await inspect();
     };

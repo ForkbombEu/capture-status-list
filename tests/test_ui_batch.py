@@ -36,10 +36,8 @@ def test_console_is_served_at_the_root() -> None:
     assert 'bitmap-minimap-row-jump' in response.text
     assert 'button[data-row]' in response.text
     assert 'document.querySelector("#token").onclick' in response.text
-    assert 'data-preview' in response.text
-    assert "application/statuslist+cwt" in response.text
-    assert "application/identifierlist+cwt" in response.text
-    assert "Token formats" in response.text
+    assert 'id="new-list-toggle"' in response.text
+    assert 'id="add-entries"' in response.text
 
 
 
@@ -81,31 +79,49 @@ def test_footer_links_to_the_repository() -> None:
     assert html.index('<a href="/docs">API docs</a>') < html.index(repository)
 
 
-def test_verify_and_revoke_reload_the_status_list_token() -> None:
-    script = client.get("/").text
-
-    for handler, endpoint in (
-        ('document.querySelector("#verify").onclick', "/verify-batch"),
-        ('document.querySelector("#revoke").onclick', "/credentials/revoke-batch"),
-    ):
-        start = script.index(handler)
-        body = script[start : start + 1500]
-        assert endpoint in body, handler
-        assert "await refreshToken(true)" in body, handler
-
-
-def test_format_previews_also_render_the_decoded_debug_token() -> None:
+def test_registry_inventory_carries_no_row_actions() -> None:
     html = client.get("/").text
-    script_start = html.index('registryRows.querySelectorAll("button[data-preview]")')
-    body = html[script_start : html.index("async function load()", script_start)]
 
-    assert html.count('data-media="application/statuslist+jwt"') == 1
-    assert html.count('data-media="application/statuslist+cwt"') == 1
-    assert html.count('data-media="application/identifierlist+jwt"') == 1
-    assert html.count('data-media="application/identifierlist+cwt"') == 1
-    assert "write(formatPreview)" in body
-    assert 'renderDecodedToken(await jsonFetch("/debug/status-list"))' in body
-    assert 'tokenCard.scrollIntoView({ behavior: "smooth", block: "start" })' in body
+    # The inventory is a plain list of country × doctype pools; choosing one is
+    # the picker's job, and the raw token previews are gone with the buttons.
+    assert 'data-preview=' not in html
+    assert 'data-work-uri=' not in html
+    assert "<th>Token formats</th>" not in html
+    assert (
+        "<thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th>"
+        "<th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>"
+        in html
+    )
+
+
+def test_console_declares_the_working_list_context() -> None:
+    html = client.get("/").text
+
+    assert "<h2>Country × doctype lists" in html
+    assert 'id="lst-select"' in html
+    assert 'id="ctx-scope"' in html
+    # Pools are created from a green button that opens a form on demand.
+    assert 'id="new-list-toggle" class="btn btn-sm btn-success"' in html
+    assert 'id="new-list-form" class="mt-4" hidden' in html
+    assert 'id="new-list" class="btn btn-md btn-success"' in html
+    # Panels are gated on the working list: the registry stays on screen, the
+    # credential panel and the allocated-entry panel belong to one list each.
+    assert 'id="legacy-card" hidden' in html
+    assert 'id="allocation-card" hidden' in html
+    assert html.index('id="allocation-card"') < html.index('id="allocation-rows"')
+    credentials_panel = html[html.index('id="legacy-card"') : html.index('id="allocation-card"')]
+    assert 'id="count"' in credentials_panel
+    assert 'id="create"' in credentials_panel
+    entries_panel = html[html.index('id="allocation-card"') : html.index('id="out"')]
+    assert 'id="entries-count"' in entries_panel
+    assert 'id="add-entries"' in entries_panel
+
+
+def test_console_pages_are_not_cached() -> None:
+    # The dashboard runs inline JavaScript; a cached copy would keep driving the
+    # previous build against a reloaded server.
+    for path in ("/", "/explorer", "/docs"):
+        assert client.get(path).headers["cache-control"] == "no-store"
 
 
 

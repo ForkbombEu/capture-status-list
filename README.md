@@ -27,6 +27,12 @@ Implemented status-list format:
 
 - IETF Token Status List, `draft-ietf-oauth-status-list-21`:
   https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/
+- Status List Aggregation, same draft section 9: the issuer publishes the URIs
+  of all its Status List Tokens as `{"status_lists": [...]}` and each token
+  points at that document with the optional `status_list.aggregation_uri` claim
+  (draft section 4.2/4.3). Several lists are the expected deployment: the draft
+  lets an issuer split entries per lifecycle, expiry or ecosystem, and a
+  Referenced Token always names its own list by `uri` plus `idx`.
 - Commission Implementing Regulation (EU) 2024/2977, as amended by Commission
   Implementing Regulation (EU) 2026/1731, for the EUDI use case expectation that
   Token Status Lists are used for wallet instance attestation and key
@@ -251,13 +257,66 @@ curl -X POST http://localhost:8000/token_status_list/set \
   --data-urlencode status=1
 ```
 
+`GET /token_status_list/aggregation` publishes this issuer's Status List
+Aggregation (draft section 9): the legacy `/status/1` list plus every allocated
+pool, in one `application/json` document, so a wallet can prefetch every list
+before matching the URI it was handed. Every Status List Token this server signs
+carries that URI in its `status_list.aggregation_uri` claim:
+
+```sh
+curl http://localhost:8000/token_status_list/aggregation
+```
+
+```json
+{
+  "status_lists": [
+    "http://localhost:8000/status/1",
+    "http://localhost:8000/token_status_list/EU/org.iso.18013.5.1.mDL/<uuid>"
+  ]
+}
+```
+
 `GET /token_status_list/get` and `GET /identifier_list/get` expose raw indexed
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
-the console.
+the console, and `GET /debug/status-list` decodes one of them:
+`?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
+out decodes the legacy `/status/1` list. The console uses that selector for its
+`TSL · JWT` and `TSL · CWT` previews and after revoking an allocated entry, so a
+revocation made through the API shows up in the decoded status list, not only in
+the allocated-entry table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
-endpoint. The reference-compatible `POST /token_status_list/set` remains
-API-key-protected.
+endpoint, and starts or tops up pools through a second one:
+`POST /dashboard/status-lists` (dashboard-only `POST /token_status_list/take`)
+allocates `count` entries in a country × doctype pool — creating it or reusing
+it — and returns both URIs plus the indices it handed out:
+
+```sh
+curl -X POST http://localhost:8000/dashboard/status-lists \
+  -H 'content-type: application/json' \
+  -d '{"country":"EU","doctype":"org.iso.18013.5.1.mDL","expiry_date":"2099-12-31","count":10}'
+```
+
+The reference-compatible `take` and `set` endpoints remain API-key-protected.
+
+Every allocated country × doctype pool is a resource of its own: revoking an
+entry there does not touch the legacy `/status/1` list. The console therefore
+works on one list at a time. `Country × doctype lists` is the inventory and the
+chooser: it lists every pool as a plain table with no row buttons, `Operate on`
+selects the list to work with, and the green `New status list` button opens a
+country / doctype / expiry form that allocates a pool and switches to it. The
+panels below the inventory then belong to the chosen list:
+
+- nothing selected — only the inventory;
+- the legacy list — the credentials panel (verification plus its own batch
+  insert, which creates `/status/1` credentials and one paired entry each) and
+  the decoded `/status/1` token;
+- an allocated pool — that pool's allocated entries with `Add entries to this
+  list` (indices only, no credentials) and the decoded token for the pool.
+
+The picker labels each option with its revoked count, starts unselected, and is
+the only thing that moves the console between lists. A pool that disappears
+(state reset, server restart) drops back to the unselected view.
 
 Create a test credential:
 
@@ -307,11 +366,12 @@ Read a raw status value through the debug-only endpoint:
 curl http://localhost:8000/debug/status/42
 ```
 
-Decode the current Status List Token — header, payload, the inflated `lst`
-and the signing JWKS — through the debug-only endpoint the console uses. The
-`lst` field carries the compressed and inflated byte counts plus a readable
-window of the inflated entries, one hex digit per entry (`0` valid, `1`
-revoked at `bits = 1`):
+Decode a Status List Token — header, payload, the inflated `lst`
+and the signing JWKS — through the debug-only endpoint the console uses. Append
+`?uri=<status-list-uri>` to decode an API-allocated list instead of the legacy
+`/status/1` list. The `lst` field carries the compressed and inflated byte
+counts plus a readable window of the inflated entries, one hex digit per entry
+(`0` valid, `1` revoked at `bits = 1`):
 
 ```sh
 curl http://localhost:8000/debug/status-list

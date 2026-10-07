@@ -233,6 +233,56 @@ def test_dashboard_revokes_allocated_entry_without_an_api_key() -> None:
     assert client.get("/identifier_list/get", params={"uri": identifier_uri, "id": idx}).text == "1"
 
 
+def test_dashboard_creates_and_tops_up_a_status_list() -> None:
+    created = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "ZZDEMO",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2099-12-31",
+            "count": 3,
+        },
+    )
+
+    assert created.status_code == 200
+    body = created.json()
+    assert len(set(body["allocated"])) == 3
+    summaries = client.get("/debug/status-lists").json()
+    assert len(summaries) == 1
+    assert summaries[0]["status_list_uri"] == body["status_list_uri"]
+    assert summaries[0]["allocated"] == 3
+
+    topped_up = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "ZZDEMO",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2099-12-31",
+            "count": 2,
+        },
+    ).json()
+
+    assert topped_up["status_list_uri"] == body["status_list_uri"]
+    assert not set(topped_up["allocated"]) & set(body["allocated"])
+    assert client.get("/debug/status-lists").json()[0]["allocated"] == 5
+
+
+def test_dashboard_status_list_rejects_a_past_expiry() -> None:
+    response = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "EU",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2020-01-01",
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "expiry_date must be in the future"
+    assert client.get("/debug/status-lists").json() == []
+
+
 def test_new_country_doctype_gets_a_distinct_uuid_list() -> None:
     first = take()
     second = client.post(
@@ -306,3 +356,130 @@ def test_local_mode_tokens_carry_x5c_and_verify_end_to_end(monkeypatch) -> None:
         local_path(uri), headers={"Accept": "application/statuslist+jwt"}
     ).text
     assert check_status(idx, revoked, expected_subject=uri) == "REVOKED"
+
+
+def test_debug_status_list_decodes_the_allocated_list_with_uri() -> None:
+    reference = take()
+    uri = reference["status_list"]["uri"]
+    idx = reference["status_list"]["idx"]
+    client.post(
+        "/dashboard/allocated-entries/revoke",
+        json={"status_list_uri": uri, "idx": idx},
+    )
+
+    decoded = client.get("/debug/status-list", params={"uri": uri}).json()
+
+    assert decoded["list_uri"] == uri
+    assert decoded["payload"]["sub"] == uri
+    assert decoded["size"] == 10_000
+    assert decoded["revoked"] == 1
+    assert decoded["revoked_indices"] == [idx]
+    # Allocations carry no credential identifier, so the console shows the
+    # allocated-entry table instead of credential assignments.
+    assert decoded["assignments"] == []
+    assert decoded["assignment_total"] == 0
+    assert decoded["jwks"]["keys"][0]["kid"] == decoded["header"]["kid"]
+
+
+def test_debug_status_list_without_uri_still_decodes_the_legacy_list() -> None:
+    created = client.post(
+        "/credentials", json={"credential_id": "cred-001"}
+    ).json()
+    client.post("/credentials/cred-001/revoke")
+
+    decoded = client.get("/debug/status-list").json()
+
+    assert decoded["list_uri"].endswith("/status/1")
+    assert decoded["payload"]["sub"] == decoded["list_uri"]
+    assert decoded["revoked_indices"] == [created["idx"]]
+    assert {item["credential_id"] for item in decoded["assignments"]} == {"cred-001"}
+
+
+def test_debug_status_list_rejects_unknown_and_identifier_lists() -> None:
+    reference = take()
+    missing = "00000000-0000-0000-0000-000000000000"
+    unknown_uri = reference["status_list"]["uri"].rsplit("/", 1)[0] + f"/{missing}"
+
+    assert (
+        client.get("/debug/status-list", params={"uri": unknown_uri}).status_code == 404
+    )
+    assert (
+        client.get(
+            "/debug/status-list", params={"uri": reference["identifier_list"]["uri"]}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.get(
+            "/debug/status-list",
+            params={"uri": "https://other.example/token_status_list/EU/mDL/x"},
+        ).status_code
+        == 400
+    )
+
+
+def _issuer_base(reference: dict) -> str:
+    return reference["status_list"]["uri"].rsplit("/token_status_list/", 1)[0]
+
+
+def test_status_list_aggregation_lists_every_status_list_token() -> None:
+    reference = take()
+
+    aggregation = client.get("/token_status_list/aggregation")
+
+    assert aggregation.status_code == 200
+    assert aggregation.headers["content-type"].startswith("application/json")
+    assert aggregation.headers["cache-control"] == "no-store"
+    assert aggregation.json() == {
+        "status_lists": [
+            f"{_issuer_base(reference)}/status/1",
+            reference["status_list"]["uri"],
+        ]
+    }
+    # Identifier lists are not Status List Tokens and must not be advertised.
+    assert reference["identifier_list"]["uri"] not in aggregation.json()["status_lists"]
+    # Every advertised URI has to resolve to a Status List Token.
+    for uri in aggregation.json()["status_lists"]:
+        assert (
+            client.get(
+                local_path(uri), headers={"accept": "application/statuslist+jwt"}
+            ).status_code
+            == 200
+        )
+
+
+def test_status_list_tokens_advertise_the_aggregation_uri() -> None:
+    reference = take()
+    aggregation_uri = f"{_issuer_base(reference)}/token_status_list/aggregation"
+
+    legacy = jwt.decode(
+        client.get(
+            "/status/1", headers={"accept": "application/statuslist+jwt"}
+        ).text,
+        options={"verify_signature": False},
+    )
+    pool = jwt.decode(
+        client.get(
+            local_path(reference["status_list"]["uri"]),
+            headers={"accept": "application/statuslist+jwt"},
+        ).text,
+        options={"verify_signature": False},
+    )
+    for payload in (legacy, pool):
+        assert payload["status_list"]["aggregation_uri"] == aggregation_uri
+
+    cwt = client.get(
+        local_path(reference["status_list"]["uri"]),
+        headers={"accept": "application/statuslist+cwt"},
+    ).content
+    _, cwt_payload = decode_cwt(cwt, public_key_pem())
+    assert cwt_payload[65533]["aggregation_uri"] == aggregation_uri
+
+    identifier_list = jwt.decode(
+        client.get(
+            local_path(reference["identifier_list"]["uri"]),
+            headers={"accept": "application/identifierlist+jwt"},
+        ).text,
+        options={"verify_signature": False},
+    )
+    assert "aggregation_uri" not in identifier_list["identifier_list"]

@@ -7,6 +7,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -36,6 +37,9 @@ ISSUER = (
     os.environ.get("STATUS_LIST_PUBLIC_URL") or "http://localhost:8000"
 ).rstrip("/")
 STATUS_LIST_URI = f"{ISSUER}/status/1"
+# Section 9 of the Token Status List draft: the document listing every Status
+# List Token URI this issuer offers, the legacy list included.
+STATUS_LIST_AGGREGATION_URI = f"{ISSUER}/token_status_list/aggregation"
 KEY_ID = "mock-eudi-status-list-1"
 INDEX_CURSOR_START = 42
 KEYS_DIR = Path(__file__).resolve().parent / "keys"
@@ -212,6 +216,7 @@ class InMemoryIssuer:
             subject=STATUS_LIST_URI,
             kid=KEY_ID,
             bits=DEFAULT_BITS,
+            aggregation_uri=STATUS_LIST_AGGREGATION_URI,
         )
 
 
@@ -289,6 +294,37 @@ def public_jwks() -> dict[str, list[dict[str, str]]]:
     return key_store.jwks()
 
 
+def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str]]]:
+    """Public JWKS for the key that signs one country's status lists.
+
+    Mirrors `build_eudi_token`: operator material when configured, otherwise
+    the local test key.
+    """
+    material = material_for(country)
+    try:
+        certificate_der = material.certificate_der
+    except FileNotFoundError:
+        return key_store.jwks()
+    if certificate_der is None:
+        return key_store.jwks()
+    numbers = x509.load_der_x509_certificate(
+        certificate_der
+    ).public_key().public_numbers()
+    return {
+        "keys": [
+            {
+                "kty": "EC",
+                "crv": "P-256",
+                "kid": material.kid,
+                "use": "sig",
+                "alg": "ES256",
+                "x": _base64url_uint(numbers.x, 32),
+                "y": _base64url_uint(numbers.y, 32),
+            }
+        ]
+    }
+
+
 def public_key_pem() -> str:
     return key_store.public_pem()
 
@@ -319,6 +355,13 @@ def eudi_list_summaries():
     return eudi_registry.list_summaries()
 
 
+def status_list_uris() -> list[str]:
+    """Every Status List Token URI this issuer serves (draft section 9)."""
+    return [STATUS_LIST_URI] + [
+        summary.status_list_uri for summary in eudi_list_summaries()
+    ]
+
+
 def eudi_allocated_entries():
     return eudi_registry.allocated_entries()
 
@@ -345,6 +388,7 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
                 kid=material.kid,
                 certificate_der=certificate,
                 include_exp=False,
+                aggregation_uri=STATUS_LIST_AGGREGATION_URI,
             )
         else:
             compressed = zlib.compress(pack_status_values(state.statuses), level=9)
@@ -352,7 +396,11 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
                 2: uri,
                 6: now,
                 65534: 3600,
-                65533: {"bits": DEFAULT_BITS, "lst": compressed},
+                65533: {
+                    "bits": DEFAULT_BITS,
+                    "lst": compressed,
+                    "aggregation_uri": STATUS_LIST_AGGREGATION_URI,
+                },
             }
             token = encode_cwt(
                 payload,

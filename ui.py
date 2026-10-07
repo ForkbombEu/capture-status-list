@@ -181,6 +181,11 @@ APP_CSS = """
       color: var(--brand-primary);
     }
     .btn-secondary:hover { background: var(--brand-secondary-strong); }
+    .btn-success {
+      background: var(--success);
+      color: var(--fg-on-primary);
+    }
+    .btn-success:hover { background: var(--success-border); }
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .btn-stack { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
     .btn-row .btn, .btn-stack .btn { justify-content: center; }
@@ -645,44 +650,41 @@ _CONSOLE_BODY = """  <header class="hero">
     <div class="container">
     <div class="console-grid">
       <div class="stack console-left">
-      <section class="card">
-        <div class="section-header"><h2>Working list</h2></div>
-        <p class="text-sm text-muted">Pick the list to work on. The console then shows that list's panels only: the legacy <span class="mono">/status/1</span> credential list and each allocated country × doctype pool are separate resources that never mix.</p>
-        <div class="list-picker mt-4">
-          <label class="field-label" for="lst-select">Status list</label>
-          <select id="lst-select" aria-label="Status list the console works on"></select>
-        </div>
-        <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
-        <div class="section-header mt-4"><h3>New status list</h3></div>
-        <p class="text-sm text-muted">Allocates the first entry of a country × doctype pool and works on it. An existing pool for the same pair is reused rather than duplicated.</p>
-        <div class="batch-fields">
-          <div>
-            <label class="field-label" for="new-country">Country</label>
-            <input id="new-country" type="text" value="EU" maxlength="16">
-          </div>
-          <div>
-            <label class="field-label" for="new-doctype">Doctype</label>
-            <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-          </div>
-          <div>
-            <label class="field-label" for="new-expiry">List expiry</label>
-            <input id="new-expiry" type="date" value="2099-12-31">
-          </div>
-        </div>
-        <div class="btn-row mt-4">
-          <button id="new-list" class="btn btn-md btn-primary">New status list</button>
-        </div>
-      </section>
-
       <section class="card" id="registry-card">
         <div class="section-header">
           <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
           <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
         </div>
-        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Token endpoints negotiate JWT or CWT with <span class="mono">Accept</span>. <span class="mono">Work on this list</span> focuses the console on that pool; the format buttons drop the raw token into Output.</p>
-        <div class="test-table-wrap">
+        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Choose the list to operate on: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
+        <div class="list-picker mt-4">
+          <label class="field-label" for="lst-select">Operate on</label>
+          <select id="lst-select" aria-label="Status list to operate on"></select>
+          <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
+        </div>
+        <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
+        <div id="new-list-form" class="mt-4" hidden>
+          <div class="batch-fields">
+            <div>
+              <label class="field-label" for="new-country">Country</label>
+              <input id="new-country" type="text" value="EU" maxlength="16">
+            </div>
+            <div>
+              <label class="field-label" for="new-doctype">Doctype</label>
+              <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+            </div>
+            <div>
+              <label class="field-label" for="new-expiry">List expiry</label>
+              <input id="new-expiry" type="date" value="2099-12-31">
+            </div>
+          </div>
+          <div class="btn-row mt-4">
+            <button id="new-list" class="btn btn-md btn-success">Create status list</button>
+            <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
+          </div>
+        </div>
+        <div class="test-table-wrap mt-4">
           <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th><th>Token formats</th></tr></thead>
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
@@ -698,6 +700,31 @@ _CONSOLE_BODY = """  <header class="hero">
           </div>
         </div>
         <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
+        <div class="batch-fields">
+          <div>
+            <label class="field-label" for="count">Count</label>
+            <input id="count" type="number" min="1" max="500" value="10">
+          </div>
+          <div>
+            <label class="field-label" for="prefix">Credential prefix</label>
+            <input id="prefix" type="text" value="cred">
+          </div>
+          <div>
+            <label class="field-label" for="country">Country</label>
+            <input id="country" type="text" value="EU" maxlength="16">
+          </div>
+          <div>
+            <label class="field-label" for="doctype">Doctype</label>
+            <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+          </div>
+          <div>
+            <label class="field-label" for="expiry-date">List expiry</label>
+            <input id="expiry-date" type="date" value="2099-12-31">
+          </div>
+        </div>
+        <div class="btn-row mt-4 mb-4">
+          <button id="create" class="btn btn-md btn-primary">Create random batch</button>
+        </div>
         <div class="btn-row mb-4">
           <button id="all" class="btn btn-sm btn-outline">Select all</button>
           <button id="none" class="btn btn-sm btn-outline">Select none</button>
@@ -727,6 +754,19 @@ _CONSOLE_BODY = """  <header class="hero">
           <h2>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h2>
         </div>
         <p class="text-sm text-muted">Entries of the working list. They identify a country, doctype, list and index, but carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
+        <div class="batch-fields">
+          <div>
+            <label class="field-label" for="entries-count">Count</label>
+            <input id="entries-count" type="number" min="1" max="500" value="10">
+          </div>
+          <div>
+            <label class="field-label" for="entries-expiry">List expiry</label>
+            <input id="entries-expiry" type="date" value="2099-12-31">
+          </div>
+        </div>
+        <div class="btn-row mt-4 mb-4">
+          <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
+        </div>
         <div class="credential-scroll">
           <div class="test-table-wrap">
             <table class="test-table">
@@ -740,36 +780,6 @@ _CONSOLE_BODY = """  <header class="hero">
       </div>
 
       <aside class="stack console-right" aria-label="Results panel">
-        <section class="card batch-card" id="batch-card" hidden>
-          <div class="section-header"><h2 id="batch-title">Add batch</h2></div>
-          <p class="text-sm text-muted" id="batch-note"></p>
-          <div class="batch-fields">
-            <div>
-              <label class="field-label" for="count">Count</label>
-              <input id="count" type="number" min="1" max="500" value="10">
-            </div>
-            <div id="prefix-field">
-              <label class="field-label" for="prefix">Credential prefix</label>
-              <input id="prefix" type="text" value="cred">
-            </div>
-            <div id="country-field">
-              <label class="field-label" for="country">Country</label>
-              <input id="country" type="text" value="EU" maxlength="16">
-            </div>
-            <div id="doctype-field">
-              <label class="field-label" for="doctype">Doctype</label>
-              <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-            </div>
-            <div>
-              <label class="field-label" for="expiry-date">List expiry</label>
-              <input id="expiry-date" type="date" value="2099-12-31">
-            </div>
-          </div>
-          <div class="btn-row mt-4">
-            <button id="create" class="btn btn-md btn-primary">Create random batch</button>
-          </div>
-        </section>
-
         <section class="card">
           <div class="section-header"><h2>Output</h2></div>
           <pre class="output" id="out">Ready</pre>
@@ -1094,60 +1104,21 @@ _CONSOLE_SCRIPT = """<script>
       });
     }
 
-    let formatPreview = null;
+    // The registry renders the list summaries: inventory only, the picker chooses.
 
     function renderRegistry(summaries) {
       registryCount.textContent = summaries.length;
-      const sameOrigin = (uri) => uri.replace(/^https?:\\/\\/[^/]+/, window.location.origin);
+      // Pure inventory: the picker above chooses the list to operate on.
       registryRows.innerHTML = summaries.length
-        ? summaries.map((item) => {
-            const tokenUri = sameOrigin(item.status_list_uri);
-            const identifierUri = sameOrigin(item.identifier_list_uri);
-            return `<tr>
+        ? summaries.map((item) => `<tr>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
             <td>${item.allocated}</td><td>${item.revoked}</td>
             <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
-            <td>
-              <div class="btn-row">
-                <button class="btn btn-sm btn-secondary" type="button" data-work-uri="${escapeHtml(item.status_list_uri)}">Work on this list</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+jwt">TSL · JWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(tokenUri)}" data-media="application/statuslist+cwt">TSL · CWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+jwt">ARL · JWT</button>
-                <button class="btn btn-sm btn-outline" type="button" data-preview="${escapeHtml(identifierUri)}" data-media="application/identifierlist+cwt">ARL · CWT</button>
-              </div>
-            </td>
-          </tr>`;
-          }).join("")
-        : `<tr class="empty-row"><td colspan="8">No country × doctype lists allocated yet.</td></tr>`;
-      registryRows.querySelectorAll("button[data-work-uri]").forEach((button) => {
-        button.onclick = () => guard(async () => {
-          await selectList(button.dataset.workUri);
-          tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
-      // Previews stay raw: they drop the requested token format into Output
-      // without moving the console to another list.
-      registryRows.querySelectorAll("button[data-preview]").forEach((button) => {
-        button.onclick = () => guard(async () => {
-          const response = await fetch(button.dataset.preview, {
-            cache: "no-store",
-            headers: { Accept: button.dataset.media },
-          });
-          if (!response.ok) {
-            write(`Token fetch failed: ${response.status}`);
-            return;
-          }
-          const type = response.headers.get("content-type") || "";
-          const body = type.includes("cwt")
-            ? [...new Uint8Array(await response.arrayBuffer())]
-            : await response.text();
-          formatPreview = { uri: button.dataset.preview, media: button.dataset.media, body };
-          write(formatPreview);
-        });
-      });
+          </tr>`).join("")
+        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
     }
 
     async function load() {
@@ -1179,34 +1150,52 @@ _CONSOLE_SCRIPT = """<script>
       render();
     }
 
+    // The credentials panel owns the credential batch: /status/1 credentials,
+    // each one paired with an entry in the country × doctype pool of the form.
     document.querySelector("#create").onclick = () => guard(async () => {
-      const pool = workingPool();
-      const count = Number(document.querySelector("#count").value || 10);
-      const expiry = document.querySelector("#expiry-date").value || "2099-12-31";
-      const data = pool
-        ? await jsonFetch("/dashboard/status-lists", {
-            method: "POST",
-            body: JSON.stringify({
-              country: pool.country,
-              doctype: pool.doctype,
-              expiry_date: expiry,
-              count,
-            }),
-          })
-        : await jsonFetch("/credentials/random-batch", {
-            method: "POST",
-            body: JSON.stringify({
-              count,
-              prefix: document.querySelector("#prefix").value || "cred",
-              country: document.querySelector("#country").value || "EU",
-              doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
-              expiry_date: expiry,
-            }),
-          });
+      const data = await jsonFetch("/credentials/random-batch", {
+        method: "POST",
+        body: JSON.stringify({
+          count: Number(document.querySelector("#count").value || 10),
+          prefix: document.querySelector("#prefix").value || "cred",
+          country: document.querySelector("#country").value || "EU",
+          doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
+          expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
+        }),
+      });
       write(data);
       await load();
       await refreshCard();
     });
+
+    // The allocated-entry panel owns its pool's top-up: entries only.
+    document.querySelector("#add-entries").onclick = () => guard(async () => {
+      const pool = workingPool();
+      if (!pool) return write("Operate on an allocated pool first.");
+      const data = await jsonFetch("/dashboard/status-lists", {
+        method: "POST",
+        body: JSON.stringify({
+          country: pool.country,
+          doctype: pool.doctype,
+          expiry_date: document.querySelector("#entries-expiry").value || pool.expires,
+          count: Number(document.querySelector("#entries-count").value || 10),
+        }),
+      });
+      write(data);
+      await load();
+      await refreshCard();
+    });
+
+    const newListForm = document.querySelector("#new-list-form");
+    const newListToggle = document.querySelector("#new-list-toggle");
+    function showNewListForm(visible) {
+      newListForm.hidden = !visible;
+      newListToggle.setAttribute("aria-expanded", String(visible));
+      if (visible) document.querySelector("#new-country").focus();
+    }
+
+    newListToggle.onclick = () => showNewListForm(newListForm.hidden);
+    document.querySelector("#new-list-cancel").onclick = () => showNewListForm(false);
 
     document.querySelector("#new-list").onclick = () => guard(async () => {
       const data = await jsonFetch("/dashboard/status-lists", {
@@ -1219,6 +1208,7 @@ _CONSOLE_SCRIPT = """<script>
         }),
       });
       write(data);
+      showNewListForm(false);
       await load();
       await selectList(data.status_list_uri);
     });
@@ -1263,7 +1253,6 @@ _CONSOLE_SCRIPT = """<script>
     const tokenCard = document.querySelector("#token-card");
     const registryCard = document.querySelector("#registry-card");
     const legacyCard = document.querySelector("#legacy-card");
-    const batchCard = document.querySelector("#batch-card");
     const allocationCard = document.querySelector("#allocation-card");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
@@ -1312,42 +1301,22 @@ _CONSOLE_SCRIPT = """<script>
       return activeListUri || "the legacy /status/1 list";
     }
 
-    // Only one kind of panel is on screen at a time: the registry while no list
-    // is chosen, then the panels of the chosen list.
+    // The registry stays on screen: it is both the inventory and the chooser.
+    // The other panels follow the chosen list, one kind at a time.
     function renderPanels() {
       const pool = Boolean(activeListUri);
-      registryCard.hidden = contextChosen;
       legacyCard.hidden = !contextChosen || pool;
-      batchCard.hidden = !contextChosen;
       allocationCard.hidden = !contextChosen || !pool;
-      renderBatchCard();
     }
 
     function workingPool() {
       return registry.find((item) => item.status_list_uri === activeListUri) || null;
     }
 
-    // The batch card serves the working list: on the legacy list it creates
-    // credentials, on an allocated pool it only hands out entries.
-    function renderBatchCard() {
-      const pool = workingPool();
-      document.querySelector("#batch-title").textContent = pool ? "Add entries" : "Add batch";
-      document.querySelector("#batch-note").textContent = pool
-        ? `Allocates new entries in ${pool.country} · ${pool.doctype} — the working list — without credentials.`
-        : "Creates /status/1 credentials and allocates each one a paired country × doctype entry.";
-      for (const selector of ["#prefix-field", "#country-field", "#doctype-field"]) {
-        document.querySelector(selector).hidden = Boolean(pool);
-      }
-      if (pool && pool.expires) document.querySelector("#expiry-date").value = pool.expires;
-      document.querySelector("#create").textContent = pool
-        ? "Add entries to this list"
-        : "Create random batch";
-    }
-
     function renderContext() {
       const pool = registry.find((item) => item.status_list_uri === activeListUri);
       document.querySelector("#ctx-scope").textContent = !contextChosen
-        ? "Pick a status list to work on; its panels appear below."
+        ? "No list selected yet: choose one above to operate on it."
         : activeListUri
           ? `Working on ${activeListUri} — ${pool.allocated} allocated, ${pool.revoked} revoked, ${pool.expired ? "expired" : "active"}.`
           : "Working on the legacy /status/1 credential list.";

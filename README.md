@@ -301,22 +301,22 @@ The reference-compatible `take` and `set` endpoints remain API-key-protected.
 
 Every allocated country × doctype pool is a resource of its own: revoking an
 entry there does not touch the legacy `/status/1` list. The console therefore
-works on one list at a time, chosen in `Working list`, and shows only that
-list's panels:
+works on one list at a time. `Country × doctype lists` is the inventory and the
+chooser: it lists every pool as a plain table with no row buttons, `Operate on`
+selects the list to work with, and the green `New status list` button opens a
+country / doctype / expiry form that allocates a pool and switches to it. The
+panels below the inventory then belong to the chosen list:
 
-- nothing selected — the picker and the `Country × doctype lists` inventory,
-  which is how a pool gets chosen, plus `New status list` to allocate a pool;
-- the legacy list — the credentials panel with its verification, the `Add batch`
-  card above Output (credentials, and one paired entry each) and the decoded
-  `/status/1` token;
-- an allocated pool — that pool's allocated entries, its decoded token, and the
-  same card as `Add entries`, which only hands out indices in that pool.
+- nothing selected — only the inventory;
+- the legacy list — the credentials panel (verification plus its own batch
+  insert, which creates `/status/1` credentials and one paired entry each) and
+  the decoded `/status/1` token;
+- an allocated pool — that pool's allocated entries with `Add entries to this
+  list` (indices only, no credentials) and the decoded token for the pool.
 
 The picker labels each option with its revoked count, starts unselected, and is
 the only thing that moves the console between lists. A pool that disappears
-(state reset, server restart) drops back to the unselected view. `Work on this
-list` in an inventory row is the same switch, while the `TSL` and `ARL` buttons
-only drop the raw token of the clicked format into Output.
+(state reset, server restart) drops back to the unselected view.
 
 Create a test credential:
 

@@ -19,6 +19,21 @@ class RandomBatchCreateRequest(BaseModel):
     expiry_date: str = Field(default="2099-12-31", pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
+class DashboardStatusListCreateRequest(BaseModel):
+    """Dashboard-only shortcut for `POST /token_status_list/take`."""
+
+    country: str = Field(default="EU", min_length=1, max_length=16)
+    doctype: str = Field(default="org.iso.18013.5.1.mDL", min_length=1, max_length=128)
+    expiry_date: str = Field(default="2099-12-31", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    count: int = Field(default=1, ge=1, le=500)
+
+
+class DashboardStatusListCreateResponse(BaseModel):
+    status_list_uri: str
+    identifier_list_uri: str
+    allocated: list[int]
+
+
 class CredentialResponse(BaseModel):
     credential_id: str
     idx: int

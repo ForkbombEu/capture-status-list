@@ -233,6 +233,56 @@ def test_dashboard_revokes_allocated_entry_without_an_api_key() -> None:
     assert client.get("/identifier_list/get", params={"uri": identifier_uri, "id": idx}).text == "1"
 
 
+def test_dashboard_creates_and_tops_up_a_status_list() -> None:
+    created = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "ZZDEMO",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2099-12-31",
+            "count": 3,
+        },
+    )
+
+    assert created.status_code == 200
+    body = created.json()
+    assert len(set(body["allocated"])) == 3
+    summaries = client.get("/debug/status-lists").json()
+    assert len(summaries) == 1
+    assert summaries[0]["status_list_uri"] == body["status_list_uri"]
+    assert summaries[0]["allocated"] == 3
+
+    topped_up = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "ZZDEMO",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2099-12-31",
+            "count": 2,
+        },
+    ).json()
+
+    assert topped_up["status_list_uri"] == body["status_list_uri"]
+    assert not set(topped_up["allocated"]) & set(body["allocated"])
+    assert client.get("/debug/status-lists").json()[0]["allocated"] == 5
+
+
+def test_dashboard_status_list_rejects_a_past_expiry() -> None:
+    response = client.post(
+        "/dashboard/status-lists",
+        json={
+            "country": "EU",
+            "doctype": "org.iso.18013.5.1.mDL",
+            "expiry_date": "2020-01-01",
+            "count": 1,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "expiry_date must be in the future"
+    assert client.get("/debug/status-lists").json() == []
+
+
 def test_new_country_doctype_gets_a_distinct_uuid_list() -> None:
     first = take()
     second = client.post(

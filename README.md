@@ -286,8 +286,18 @@ revocation made through the API shows up in the decoded status list, not only in
 the allocated-entry table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
-endpoint. The reference-compatible `POST /token_status_list/set` remains
-API-key-protected.
+endpoint, and starts or tops up pools through a second one:
+`POST /dashboard/status-lists` (dashboard-only `POST /token_status_list/take`)
+allocates `count` entries in a country × doctype pool — creating it or reusing
+it — and returns both URIs plus the indices it handed out:
+
+```sh
+curl -X POST http://localhost:8000/dashboard/status-lists \
+  -H 'content-type: application/json' \
+  -d '{"country":"EU","doctype":"org.iso.18013.5.1.mDL","expiry_date":"2099-12-31","count":10}'
+```
+
+The reference-compatible `take` and `set` endpoints remain API-key-protected.
 
 Every allocated country × doctype pool is a resource of its own: revoking an
 entry there does not touch the legacy `/status/1` list. The console therefore
@@ -295,10 +305,12 @@ works on one list at a time, chosen in `Working list`, and shows only that
 list's panels:
 
 - nothing selected — the picker and the `Country × doctype lists` inventory,
-  which is how a pool gets chosen;
-- the legacy list — the merged credentials and batch panel (credentials, their
-  verification, `Create random batch`) plus the decoded `/status/1` token;
-- an allocated pool — that pool's allocated entries and its decoded token.
+  which is how a pool gets chosen, plus `New status list` to allocate a pool;
+- the legacy list — the credentials panel with its verification, the `Add batch`
+  card above Output (credentials, and one paired entry each) and the decoded
+  `/status/1` token;
+- an allocated pool — that pool's allocated entries, its decoded token, and the
+  same card as `Add entries`, which only hands out indices in that pool.
 
 The picker labels each option with its revoked count, starts unselected, and is
 the only thing that moves the console between lists. A pool that disappears

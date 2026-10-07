@@ -101,12 +101,19 @@ def test_console_declares_the_working_list_context() -> None:
     assert 'id="lst-select"' in html
     assert 'id="ctx-scope"' in html
     # Panels are gated on the working list: the registry is the chooser, the
-    # credential panel and the allocated-entry table belong to one list each.
+    # credential panel and the allocated-entry table belong to one list each,
+    # and the batch form sits above Output for whichever list is working.
     assert 'id="registry-card"' in html
     assert 'id="legacy-card" hidden' in html
+    assert 'id="batch-card" hidden' in html
     assert 'id="allocation-card" hidden' in html
-    assert html.index('id="legacy-card"') < html.index('id="count"')
+    assert 'id="new-list"' in html
+    assert 'id="new-country"' in html and 'id="new-doctype"' in html
     assert html.index('id="allocation-card"') < html.index('id="allocation-rows"')
+    credentials_panel = html[html.index('id="legacy-card"') : html.index('id="allocation-card"')]
+    assert 'id="count"' not in credentials_panel
+    batch_panel = html[html.index('id="batch-card"') : html.index('id="out"')]
+    assert 'id="count"' in batch_panel
 
 
 def test_console_pages_are_not_cached() -> None:

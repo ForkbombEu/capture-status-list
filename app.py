@@ -49,6 +49,8 @@ from models import (
     CredentialListResponse,
     CredentialCreateRequest,
     CredentialResponse,
+    DashboardStatusListCreateRequest,
+    DashboardStatusListCreateResponse,
     DebugStatusResponse,
     RandomBatchCreateRequest,
     RandomBatchCreateResponse,
@@ -245,6 +247,37 @@ def revoke_dashboard_allocated_entry(
         idx=request.idx,
         status="REVOKED",
     )
+
+@app.post(
+    "/dashboard/status-lists",
+    response_model=DashboardStatusListCreateResponse,
+    include_in_schema=False,
+)
+def create_dashboard_status_list(
+    request: DashboardStatusListCreateRequest,
+) -> DashboardStatusListCreateResponse:
+    """Dashboard-only `POST /token_status_list/take` without the API key.
+
+    Allocates `count` entries in the country × doctype pool, creating the pool
+    or reusing the existing one, so the console can start a list or top one up.
+    """
+    allocated: list[int] = []
+    reference = None
+    for _ in range(request.count):
+        try:
+            reference = take_eudi_reference(
+                request.country, request.doctype, request.expiry_date
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        allocated.append(reference.idx)
+    assert reference is not None
+    return DashboardStatusListCreateResponse(
+        status_list_uri=reference.status_list_uri,
+        identifier_list_uri=reference.identifier_list_uri,
+        allocated=allocated,
+    )
+
 
 
 async def _reference_form(request: Request) -> dict[str, str]:

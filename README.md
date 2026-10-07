@@ -253,11 +253,33 @@ curl -X POST http://localhost:8000/token_status_list/set \
 
 `GET /token_status_list/get` and `GET /identifier_list/get` expose raw indexed
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
-the console.
+the console, and `GET /debug/status-list` decodes one of them:
+`?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
+out decodes the legacy `/status/1` list. The console uses that selector for its
+`TSL · JWT` and `TSL · CWT` previews and after revoking an allocated entry, so a
+revocation made through the API shows up in the decoded status list, not only in
+the allocated-entry table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
 endpoint. The reference-compatible `POST /token_status_list/set` remains
 API-key-protected.
+
+Every allocated country × doctype pool is a resource of its own: revoking an
+entry there does not touch the legacy `/status/1` list. The console therefore
+works on one list at a time, chosen in `Working list`, and shows only that
+list's panels:
+
+- nothing selected — the picker and the `Country × doctype lists` inventory,
+  which is how a pool gets chosen;
+- the legacy list — the merged credentials and batch panel (credentials, their
+  verification, `Create random batch`) plus the decoded `/status/1` token;
+- an allocated pool — that pool's allocated entries and its decoded token.
+
+The picker labels each option with its revoked count, starts unselected, and is
+the only thing that moves the console between lists. A pool that disappears
+(state reset, server restart) drops back to the unselected view. `Work on this
+list` in an inventory row is the same switch, while the `TSL` and `ARL` buttons
+only drop the raw token of the clicked format into Output.
 
 Create a test credential:
 
@@ -307,11 +329,12 @@ Read a raw status value through the debug-only endpoint:
 curl http://localhost:8000/debug/status/42
 ```
 
-Decode the current Status List Token — header, payload, the inflated `lst`
-and the signing JWKS — through the debug-only endpoint the console uses. The
-`lst` field carries the compressed and inflated byte counts plus a readable
-window of the inflated entries, one hex digit per entry (`0` valid, `1`
-revoked at `bits = 1`):
+Decode a Status List Token — header, payload, the inflated `lst`
+and the signing JWKS — through the debug-only endpoint the console uses. Append
+`?uri=<status-list-uri>` to decode an API-allocated list instead of the legacy
+`/status/1` list. The `lst` field carries the compressed and inflated byte
+counts plus a readable window of the inflated entries, one hex digit per entry
+(`0` valid, `1` revoked at `bits = 1`):
 
 ```sh
 curl http://localhost:8000/debug/status-list

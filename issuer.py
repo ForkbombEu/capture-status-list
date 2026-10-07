@@ -7,6 +7,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -287,6 +288,37 @@ def list_version() -> int:
 
 def public_jwks() -> dict[str, list[dict[str, str]]]:
     return key_store.jwks()
+
+
+def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str]]]:
+    """Public JWKS for the key that signs one country's status lists.
+
+    Mirrors `build_eudi_token`: operator material when configured, otherwise
+    the local test key.
+    """
+    material = material_for(country)
+    try:
+        certificate_der = material.certificate_der
+    except FileNotFoundError:
+        return key_store.jwks()
+    if certificate_der is None:
+        return key_store.jwks()
+    numbers = x509.load_der_x509_certificate(
+        certificate_der
+    ).public_key().public_numbers()
+    return {
+        "keys": [
+            {
+                "kty": "EC",
+                "crv": "P-256",
+                "kid": material.kid,
+                "use": "sig",
+                "alg": "ES256",
+                "x": _base64url_uint(numbers.x, 32),
+                "y": _base64url_uint(numbers.y, 32),
+            }
+        ]
+    }
 
 
 def public_key_pem() -> str:

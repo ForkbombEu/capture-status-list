@@ -81,31 +81,39 @@ def test_footer_links_to_the_repository() -> None:
     assert html.index('<a href="/docs">API docs</a>') < html.index(repository)
 
 
-def test_verify_and_revoke_reload_the_status_list_token() -> None:
-    script = client.get("/").text
-
-    for handler, endpoint in (
-        ('document.querySelector("#verify").onclick', "/verify-batch"),
-        ('document.querySelector("#revoke").onclick', "/credentials/revoke-batch"),
-    ):
-        start = script.index(handler)
-        body = script[start : start + 1500]
-        assert endpoint in body, handler
-        assert "await refreshToken(true)" in body, handler
-
-
-def test_format_previews_also_render_the_decoded_debug_token() -> None:
+def test_registry_previews_declare_each_token_format() -> None:
     html = client.get("/").text
-    script_start = html.index('registryRows.querySelectorAll("button[data-preview]")')
-    body = html[script_start : html.index("async function load()", script_start)]
 
     assert html.count('data-media="application/statuslist+jwt"') == 1
     assert html.count('data-media="application/statuslist+cwt"') == 1
     assert html.count('data-media="application/identifierlist+jwt"') == 1
     assert html.count('data-media="application/identifierlist+cwt"') == 1
-    assert "write(formatPreview)" in body
-    assert 'renderDecodedToken(await jsonFetch("/debug/status-list"))' in body
-    assert 'tokenCard.scrollIntoView({ behavior: "smooth", block: "start" })' in body
+    # Every pool can be selected as the console's working list; the raw token
+    # previews stay separate so a preview never moves the context.
+    assert html.count("data-work-uri=") == 1
+    assert html.count("data-preview=") == 4
+
+
+def test_console_declares_the_working_list_context() -> None:
+    html = client.get("/").text
+
+    assert "<h2>Working list</h2>" in html
+    assert 'id="lst-select"' in html
+    assert 'id="ctx-scope"' in html
+    # Panels are gated on the working list: the registry is the chooser, the
+    # credential panel and the allocated-entry table belong to one list each.
+    assert 'id="registry-card"' in html
+    assert 'id="legacy-card" hidden' in html
+    assert 'id="allocation-card" hidden' in html
+    assert html.index('id="legacy-card"') < html.index('id="count"')
+    assert html.index('id="allocation-card"') < html.index('id="allocation-rows"')
+
+
+def test_console_pages_are_not_cached() -> None:
+    # The dashboard runs inline JavaScript; a cached copy would keep driving the
+    # previous build against a reloaded server.
+    for path in ("/", "/explorer", "/docs"):
+        assert client.get(path).headers["cache-control"] == "no-store"
 
 
 

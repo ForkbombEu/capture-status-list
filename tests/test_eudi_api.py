@@ -306,3 +306,63 @@ def test_local_mode_tokens_carry_x5c_and_verify_end_to_end(monkeypatch) -> None:
         local_path(uri), headers={"Accept": "application/statuslist+jwt"}
     ).text
     assert check_status(idx, revoked, expected_subject=uri) == "REVOKED"
+
+
+def test_debug_status_list_decodes_the_allocated_list_with_uri() -> None:
+    reference = take()
+    uri = reference["status_list"]["uri"]
+    idx = reference["status_list"]["idx"]
+    client.post(
+        "/dashboard/allocated-entries/revoke",
+        json={"status_list_uri": uri, "idx": idx},
+    )
+
+    decoded = client.get("/debug/status-list", params={"uri": uri}).json()
+
+    assert decoded["list_uri"] == uri
+    assert decoded["payload"]["sub"] == uri
+    assert decoded["size"] == 10_000
+    assert decoded["revoked"] == 1
+    assert decoded["revoked_indices"] == [idx]
+    # Allocations carry no credential identifier, so the console shows the
+    # allocated-entry table instead of credential assignments.
+    assert decoded["assignments"] == []
+    assert decoded["assignment_total"] == 0
+    assert decoded["jwks"]["keys"][0]["kid"] == decoded["header"]["kid"]
+
+
+def test_debug_status_list_without_uri_still_decodes_the_legacy_list() -> None:
+    created = client.post(
+        "/credentials", json={"credential_id": "cred-001"}
+    ).json()
+    client.post("/credentials/cred-001/revoke")
+
+    decoded = client.get("/debug/status-list").json()
+
+    assert decoded["list_uri"].endswith("/status/1")
+    assert decoded["payload"]["sub"] == decoded["list_uri"]
+    assert decoded["revoked_indices"] == [created["idx"]]
+    assert {item["credential_id"] for item in decoded["assignments"]} == {"cred-001"}
+
+
+def test_debug_status_list_rejects_unknown_and_identifier_lists() -> None:
+    reference = take()
+    missing = "00000000-0000-0000-0000-000000000000"
+    unknown_uri = reference["status_list"]["uri"].rsplit("/", 1)[0] + f"/{missing}"
+
+    assert (
+        client.get("/debug/status-list", params={"uri": unknown_uri}).status_code == 404
+    )
+    assert (
+        client.get(
+            "/debug/status-list", params={"uri": reference["identifier_list"]["uri"]}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.get(
+            "/debug/status-list",
+            params={"uri": "https://other.example/token_status_list/EU/mDL/x"},
+        ).status_code
+        == 400
+    )

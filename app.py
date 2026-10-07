@@ -21,6 +21,7 @@ from issuer import (
     debug_status_at,
     eudi_allocated_entries,
     eudi_list_summaries,
+    eudi_public_jwks,
     eudi_registry,
     eudi_status_at,
     generate_current_status_list_token,
@@ -35,6 +36,8 @@ from issuer import (
     take_eudi_reference,
     revoke_credential_record,
 )
+
+from list_registry import TOKEN_LIST_KIND
 from models import (
     BatchError,
     AllocatedStatusListEntry,
@@ -118,19 +121,25 @@ def _verify_record(credential_id: str, token: str | None = None) -> VerifyRespon
     return result
 
 
+def _console_html(content: str) -> HTMLResponse:
+    # The console ships its behaviour inline; a cached copy would keep running
+    # the previous dashboard against a reloaded server.
+    return HTMLResponse(content, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/", response_class=HTMLResponse)
 def home() -> HTMLResponse:
-    return HTMLResponse(console_html())
+    return _console_html(console_html())
 
 
 @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
 def docs() -> HTMLResponse:
-    return HTMLResponse(docs_html(app.openapi_url or "/openapi.json"))
+    return _console_html(docs_html(app.openapi_url or "/openapi.json"))
 
 
 @app.get("/explorer", response_class=HTMLResponse, include_in_schema=False)
 def explorer() -> HTMLResponse:
-    return HTMLResponse(explorer_html())
+    return _console_html(explorer_html())
 
 
 @app.get("/favicon.svg", include_in_schema=False)
@@ -488,10 +497,16 @@ def debug_status(idx: int) -> DebugStatusResponse:
 @app.get("/debug/status-list", response_model=StatusListDebugResponse)
 def debug_status_list(
     response: Response,
+    uri: str | None = None,
     assignment_offset: int = 0,
     assignment_limit: int = 100,
 ) -> StatusListDebugResponse:
-    """Decode the current Status List Token for the debugger.
+    """Decode a Status List Token for the debugger.
+
+    Without `uri` the legacy `/status/1` list is decoded. With `uri` the paired
+    country × doctype list allocated by `POST /token_status_list/take` is
+    decoded, so the console can inspect the lists partners create through the
+    reference API. Credential assignments only exist for the legacy list.
 
     The status spectrum is returned in full; credential assignment rows are
     paginated so large fixtures do not require rendering every row at once.
@@ -500,6 +515,15 @@ def debug_status_list(
         raise HTTPException(status_code=400, detail="assignment_offset must be non-negative")
     if assignment_limit < 1 or assignment_limit > 500:
         raise HTTPException(status_code=400, detail="assignment_limit must be between 1 and 500")
+    response.headers["Cache-Control"] = "no-store"
+    if uri is None:
+        return _legacy_status_list_debug(assignment_offset, assignment_limit)
+    return _allocated_status_list_debug(uri, assignment_limit)
+
+
+def _legacy_status_list_debug(
+    assignment_offset: int, assignment_limit: int
+) -> StatusListDebugResponse:
     token = generate_current_status_list_token()
     header = jwt.get_unverified_header(token)
     payload = jwt.decode(token, options={"verify_signature": False})
@@ -522,9 +546,8 @@ def debug_status_list(
         )
         for record in records[assignment_offset : assignment_offset + assignment_limit]
     ]
-
-    response.headers["Cache-Control"] = "no-store"
     return StatusListDebugResponse(
+        list_uri=STATUS_LIST_URI,
         token=token,
         header=header,
         payload=payload,
@@ -545,6 +568,53 @@ def debug_status_list(
         assignment_limit=assignment_limit,
         assignment_total=assignment_total,
         jwks=public_jwks(),
+    )
+
+
+def _allocated_status_list_debug(uri: str, assignment_limit: int) -> StatusListDebugResponse:
+    try:
+        kind, state = eudi_registry.get_by_uri(uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if kind != TOKEN_LIST_KIND:
+        raise HTTPException(status_code=400, detail="uri must reference a token status list")
+
+    token, _, _ = build_eudi_token(uri, "jwt")
+    header = jwt.get_unverified_header(token)
+    payload = jwt.decode(token, options={"verify_signature": False})
+    status_list = payload["status_list"]
+    bits = status_list["bits"]
+    compressed = base64url_decode(status_list["lst"])
+    inflated = zlib.decompress(compressed)
+    statuses = state.statuses
+    revoked_indices = [
+        idx for idx, value in enumerate(statuses) if value == STATUS_INVALID
+    ]
+    allocated = [
+        entry for entry in eudi_allocated_entries() if entry.status_list_uri == uri
+    ]
+    return StatusListDebugResponse(
+        list_uri=uri,
+        token=token,
+        header=header,
+        payload=payload,
+        bits=bits,
+        size=len(statuses),
+        valid=len(statuses) - len(revoked_indices),
+        revoked=len(revoked_indices),
+        revoked_indices=revoked_indices,
+        lst=_status_list_bits(
+            statuses,
+            bits=bits,
+            compressed_bytes=len(compressed),
+            inflated_bytes=len(inflated),
+            around=[entry.idx for entry in allocated],
+        ),
+        assignments=[],
+        assignment_limit=assignment_limit,
+        jwks=eudi_public_jwks(state.country),
     )
 
 

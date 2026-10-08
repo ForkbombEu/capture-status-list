@@ -12,6 +12,10 @@ Status-list bytes use the `status_list` claim containing `bits` and `lst`,
 where `lst` is the zlib-compressed status byte array encoded as base64url
 without padding in JWT form (raw compressed bytes in CWT form).
 
+CWT tokens are RFC 9052 COSE_Sign1 (tag 18): ES256 over the `Signature1`
+Sig_structure, a 64-byte `r || s` signature, and the country `kid` (for
+example `EU-status-list`) in the unprotected header, matching the JWT `kid`.
+
 The issuer, credential registry, debug endpoint, reset endpoint, and verifier
 endpoint are simplified test infrastructure. They are not EUDI issuance,
 presentation, trust-list, PKI, authentication, authorization, or wallet

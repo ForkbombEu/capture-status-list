@@ -2,10 +2,11 @@
 
 The wire representation produced here is a deterministic CBOR tag 18 value:
 ``18([protected, unprotected, payload, signature])``.  The payload and the
-protected header map are encoded canonically before the ES256 signature is
-created. This codec intentionally implements the reference service's direct
-protected-bytes plus payload-bytes signing contract and its small CBOR subset
-instead of pulling in a general-purpose CBOR or COSE package.
+protected header map are encoded canonically, then signed as specified by
+RFC 9052: the ES256 signature covers the ``Signature1`` Sig_structure and is
+carried as the fixed-length ``r || s`` byte string.  The codec implements the
+small CBOR subset it needs instead of pulling in a general-purpose CBOR or COSE
+package.
 """
 
 from __future__ import annotations
@@ -217,9 +218,9 @@ def _public_key(public_key_pem: str | bytes) -> ec.EllipticCurvePublicKey:
 
 
 def _sig_structure(protected: bytes, payload: bytes) -> bytes:
-    # The reference implementation signs the two encoded COSE components
-    # directly. Preserve that wire contract for interoperability.
-    return protected + payload
+    # RFC 9052 section 4.4: Sig_structure for COSE_Sign1, with empty
+    # external_aad.
+    return _encode_cbor(["Signature1", protected, b"", payload])
 
 
 def encode_cwt(
@@ -227,6 +228,8 @@ def encode_cwt(
     private_key_pem: str | bytes,
     media_type: str,
     certificate_der: bytes | None = None,
+    *,
+    kid: str,
 ) -> bytes:
     """Encode and ES256-sign a status/identifier-list CWT.
 
@@ -234,7 +237,8 @@ def encode_cwt(
     interpreted: both status-list and identifier-list profiles can use their
     own registered numeric labels, while application/private claims can use
     text labels.  ``certificate_der``, when present, is carried as the COSE
-    x5chain (label 33) protected header value.
+    x5chain (label 33) protected header value.  ``kid`` is carried as the
+    unprotected key identifier (label 4).
     """
 
     if not isinstance(payload, Mapping):
@@ -245,19 +249,23 @@ def encode_cwt(
         certificate_der, (bytes, bytearray, memoryview)
     ):
         raise TypeError("certificate_der must be bytes or None")
+    if not isinstance(kid, str):
+        raise TypeError("kid must be text")
 
     protected_map: dict[int, Any] = {1: _ES256_COSE_ALG, 16: media_type}
     if certificate_der is not None:
         protected_map[33] = bytes(certificate_der)
     protected = _encode_cbor(protected_map)
     payload_bytes = _encode_cbor(payload)
-    signature = _private_key(private_key_pem).sign(
+    der_signature = _private_key(private_key_pem).sign(
         _sig_structure(protected, payload_bytes), ec.ECDSA(hashes.SHA256())
     )
+    r, s = decode_dss_signature(der_signature)
+    signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
 
     token = _CborTag(
         _COSE_SIGN1_TAG,
-        [protected, {4: b"1"}, payload_bytes, signature],
+        [protected, {4: kid.encode("utf-8")}, payload_bytes, signature],
     )
     return _encode_cbor(token)
 
@@ -311,12 +319,12 @@ def decode_cwt(
     if not isinstance(payload, dict):
         raise ValueError("CWT payload must be a CBOR map")
 
-    if len(signature) == 64:
-        r = int.from_bytes(signature[:32], "big")
-        s = int.from_bytes(signature[32:], "big")
-        signature_der = encode_dss_signature(r, s)
-    else:
-        signature_der = signature
+    if len(signature) != 64:
+        raise ValueError("ES256 COSE signature must be 64 bytes (r || s)")
+    signature_der = encode_dss_signature(
+        int.from_bytes(signature[:32], "big"),
+        int.from_bytes(signature[32:], "big"),
+    )
     try:
         _public_key(public_key_pem).verify(
             signature_der,

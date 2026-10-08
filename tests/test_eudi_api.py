@@ -172,7 +172,7 @@ def test_status_list_jwt_and_cwt_share_the_same_list() -> None:
     headers, cwt_payload = decode_cwt(cwt_response.content, public_key_pem())
     assert jwt_response.headers["content-type"].startswith("application/statuslist+jwt")
     assert headers[1] == -7
-    assert headers[4] == b"1"
+    assert headers[4] == jwt.get_unverified_header(jwt_response.text)["kid"].encode()
     assert headers[16] == "application/statuslist+cwt"
     assert cwt_payload[2] == reference["status_list"]["uri"]
     assert cwt_payload[65533]["bits"] == jwt_payload["status_list"]["bits"]

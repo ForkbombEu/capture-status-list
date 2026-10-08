@@ -407,6 +407,7 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
                 private_pem,
                 STATUS_LIST_CWT_MEDIA_TYPE,
                 certificate,
+                kid=material.kid,
             )
             return token, STATUS_LIST_CWT_MEDIA_TYPE, state.version
         return token, "application/statuslist+jwt", state.version
@@ -427,6 +428,7 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
             private_pem,
             IDENTIFIER_LIST_CWT_MEDIA_TYPE,
             certificate,
+            kid=material.kid,
         )
         return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE, state.version
     return token, "application/identifierlist+jwt", state.version

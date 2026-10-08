@@ -15,6 +15,8 @@ without padding in JWT form (raw compressed bytes in CWT form).
 CWT tokens are RFC 9052 COSE_Sign1 (tag 18): ES256 over the `Signature1`
 Sig_structure, a 64-byte `r || s` signature, and the country `kid` (for
 example `EU-status-list`) in the unprotected header, matching the JWT `kid`.
+Status list CWTs carry `exp` (label 4) set to `iat` plus the HTTP `max-age`, so
+a cached token never outlives its expiry; status list JWTs stay without `exp`.
 
 The issuer, credential registry, debug endpoint, reset endpoint, and verifier
 endpoint are simplified test infrastructure. They are not EUDI issuance,

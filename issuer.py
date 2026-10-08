@@ -26,6 +26,7 @@ from status_list import (
     STATUS_VALID,
     IndexScatter,
     InvalidStatusListIndex,
+    TOKEN_TTL_SECONDS,
     generate_identifier_list_token,
     generate_status_list_token,
     pack_status_values,
@@ -394,6 +395,9 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
             compressed = zlib.compress(pack_status_values(state.statuses), level=9)
             payload = {
                 2: uri,
+                # exp (4) is required by mdoc status verifiers; it covers the
+                # HTTP max-age so a cached token never outlives its exp.
+                4: now + TOKEN_TTL_SECONDS,
                 6: now,
                 65534: 3600,
                 65533: {

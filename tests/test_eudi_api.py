@@ -177,6 +177,8 @@ def test_status_list_jwt_and_cwt_share_the_same_list() -> None:
     assert cwt_payload[2] == reference["status_list"]["uri"]
     assert cwt_payload[65533]["bits"] == jwt_payload["status_list"]["bits"]
     assert cwt_payload[65533]["lst"]
+    max_age = int(cwt_response.headers["cache-control"].removeprefix("max-age="))
+    assert cwt_payload[4] - cwt_payload[6] >= max_age
 
 def test_identifier_list_jwt_and_cwt_are_iso_18013_5_shaped() -> None:
     reference = take()

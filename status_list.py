@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import math
+import os
 import time
 import zlib
 from typing import Iterable
@@ -18,7 +19,28 @@ STATUS_INVALID = 0x01
 STATUS_SUSPENDED = 0x02
 
 
-TOKEN_TTL_SECONDS = 43_200
+def _token_ttl_from_env() -> int:
+    """Read the Status List Token lifetime from ``STATUS_LIST_TTL_SECONDS``.
+
+    The value drives every freshness signal a consumer may follow: the ``exp``
+    and ``ttl`` claims (JWT and CWT) and the HTTP ``max-age``. Test deployments
+    shorten it so a revocation reaches every conformant consumer within one
+    lifetime; production keeps the 12 h default.
+    """
+
+    raw = os.environ.get("STATUS_LIST_TTL_SECONDS", "43200")
+    try:
+        ttl = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"STATUS_LIST_TTL_SECONDS must be a positive integer: {raw!r}"
+        ) from exc
+    if ttl < 1:
+        raise ValueError(f"STATUS_LIST_TTL_SECONDS must be a positive integer: {raw!r}")
+    return ttl
+
+
+TOKEN_TTL_SECONDS = _token_ttl_from_env()
 ALLOWED_BITS = {1, 2, 4, 8}
 
 
@@ -185,20 +207,19 @@ def generate_status_list_token(
     ttl: int = TOKEN_TTL_SECONDS,
     aggregation_uri: str | None = None,
     certificate_der: bytes | None = None,
-    include_exp: bool = True,
+    issued_at: int | None = None,
 ) -> str:
-    now = int(time.time())
+    now = int(time.time()) if issued_at is None else issued_at
     payload: dict[str, object] = {
         "iss": issuer,
         "sub": subject,
         "iat": now,
+        "exp": now + ttl,
+        "ttl": ttl,
         "status_list": generate_status_list(
             values, bits=bits, aggregation_uri=aggregation_uri
         ),
     }
-    if include_exp:
-        payload["exp"] = now + ttl
-        payload["ttl"] = ttl
     headers: dict[str, object] = {
         "alg": "ES256",
         "kid": kid,
@@ -216,17 +237,17 @@ def generate_identifier_list_token(
     kid: str,
     ttl: int = TOKEN_TTL_SECONDS,
     certificate_der: bytes | None = None,
-    include_exp: bool = False,
+    issued_at: int | None = None,
 ) -> str:
-    now = int(time.time())
+    now = int(time.time()) if issued_at is None else issued_at
     payload: dict[str, object] = {
         "iss": issuer,
         "sub": subject,
         "iat": now,
+        "exp": now + ttl,
+        "ttl": ttl,
         "identifier_list": identifiers,
     }
-    if include_exp:
-        payload["exp"] = now + ttl
     headers: dict[str, object] = {
         "alg": "ES256",
         "kid": kid,

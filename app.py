@@ -1,5 +1,7 @@
 import os
+import time
 import zlib
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -24,6 +26,7 @@ from issuer import (
     eudi_public_jwks,
     eudi_registry,
     eudi_status_at,
+    eudi_list_version,
     generate_current_status_list_token,
     get_credential_record,
     list_credential_records,
@@ -359,23 +362,97 @@ async def take_status_list(
     )
 
 
+def _unix_now() -> int:
+    return int(time.time())
+
+
+def _status_token_etag(format_name: str, version: int, expires_at: int) -> str:
+    # The ETag names the exact token a consumer holds: its format, the list
+    # version it reflects, and its exp.
+    return f'W/"{format_name}.{version}.{expires_at}"'
+
+
+def _cached_token_expiry(
+    if_none_match: str | None, format_name: str, version: int, now: int
+) -> int | None:
+    """Return the exp of a cached copy that is still current and unexpired."""
+    if not if_none_match:
+        return None
+    for candidate in if_none_match.split(","):
+        parts = candidate.strip().removeprefix("W/").strip('"').split(".")
+        if len(parts) != 3 or parts[0] != format_name:
+            continue
+        try:
+            cached_version, expires_at = int(parts[1]), int(parts[2])
+        except ValueError:
+            continue
+        if cached_version == version and expires_at > now:
+            return expires_at
+    return None
+
+
+def _freshness_headers(
+    format_name: str, version: int, expires_at: int, now: int, vary: str | None
+) -> dict[str, str]:
+    headers = {
+        "Cache-Control": f"max-age={expires_at - now}",
+        "ETag": _status_token_etag(format_name, version, expires_at),
+    }
+    if vary is not None:
+        headers["Vary"] = vary
+    return headers
+
+
+def _status_token_response(
+    request: Request,
+    *,
+    format_name: str,
+    version: int,
+    sign: Callable[[int], tuple[bytes | str, str]],
+    vary: str | None = None,
+) -> Response:
+    """Serve a signed list token whose every freshness signal ends at its exp.
+
+    Consumers may follow the HTTP max-age, the ``ttl`` claim or the ``exp``
+    claim (draft-ietf-oauth-status-list-21 prioritises the claims). All three
+    end at the same instant, so whichever one a consumer honours, it fetches a
+    fresh token once the served one expires. A 304 only confirms the
+    consumer's own copy, with max-age set to that copy's remaining lifetime,
+    so revalidation never keeps a token alive past its exp.
+    """
+    now = _unix_now()
+    cached_expiry = _cached_token_expiry(
+        request.headers.get("if-none-match"), format_name, version, now
+    )
+    if cached_expiry is not None:
+        return Response(
+            status_code=304,
+            headers=_freshness_headers(format_name, version, cached_expiry, now, vary),
+        )
+    token, media_type = sign(now)
+    body = token if isinstance(token, bytes) else token.encode("utf-8")
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers=_freshness_headers(
+            format_name, version, now + TOKEN_TTL_SECONDS, now, vary
+        ),
+    )
+
+
 def _serve_reference_list(uri: str, request: Request, kind: str) -> Response:
+    format_name = _reference_format(request, kind)
     try:
-        token, media_type, version = build_eudi_token(uri, _reference_format(request, kind))
+        version = eudi_list_version(uri)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    etag = f'W/"{version}"'
-    headers = {
-        "Cache-Control": f"max-age={TOKEN_TTL_SECONDS}",
-        "ETag": etag,
-        "Vary": "Accept",
-    }
-    if request.headers.get("if-none-match") and _etag_matches(
-        request.headers["if-none-match"], etag
-    ):
-        return Response(status_code=304, headers=headers, media_type=media_type)
-    body = token if isinstance(token, bytes) else token.encode("utf-8")
-    return Response(content=body, media_type=media_type, headers=headers)
+    return _status_token_response(
+        request,
+        format_name=format_name,
+        version=version,
+        sign=lambda issued_at: build_eudi_token(uri, format_name, issued_at),
+        vary="Accept",
+    )
 
 
 @app.get("/token_status_list/{country}/{doctype}/{list_id}")
@@ -477,35 +554,17 @@ async def debug_expire_status_list(request: Request) -> dict[str, str]:
     return {"status": "EXPIRED", "uri": uri, "expiry_date": expiry_date}
 
 
-def _status_list_etag() -> str:
-    return f'W/"{list_version()}"'
-
-
-def _etag_matches(if_none_match: str, etag: str) -> bool:
-    candidates = [tag.strip() for tag in if_none_match.split(",")]
-    bare = etag.removeprefix("W/")
-    return "*" in candidates or etag in candidates or bare in candidates
-
-
 @app.get("/status/1", response_class=PlainTextResponse)
-def status_list_token(request: Request) -> PlainTextResponse:
-    """Serve the signed Status List Token with weak-ETag revalidation.
-
-    ``max-age = ttl`` mirrors the German national wallet backend: verifiers
-    cache the token for its validity window and revalidate via
-    ``If-None-Match``, so a revocation propagates within one ttl.
-    """
-    etag = _status_list_etag()
-    headers = {
-        "Cache-Control": f"max-age={TOKEN_TTL_SECONDS}",
-        "ETag": etag,
-    }
-    if_none_match = request.headers.get("if-none-match")
-    if if_none_match and _etag_matches(if_none_match, etag):
-        return PlainTextResponse(b"", status_code=304, headers=headers)
-    token = generate_current_status_list_token()
-    return PlainTextResponse(
-        token, media_type="application/statuslist+jwt", headers=headers
+def status_list_token(request: Request) -> Response:
+    """Serve the legacy Status List Token; see :func:`_status_token_response`."""
+    return _status_token_response(
+        request,
+        format_name="jwt",
+        version=list_version(),
+        sign=lambda issued_at: (
+            generate_current_status_list_token(issued_at),
+            "application/statuslist+jwt",
+        ),
     )
 
 
@@ -628,7 +687,7 @@ def _allocated_status_list_debug(uri: str, assignment_limit: int) -> StatusListD
     if kind != TOKEN_LIST_KIND:
         raise HTTPException(status_code=400, detail="uri must reference a token status list")
 
-    token, _, _ = build_eudi_token(uri, "jwt")
+    token, _ = build_eudi_token(uri, "jwt")
     header = jwt.get_unverified_header(token)
     payload = jwt.decode(token, options={"verify_signature": False})
     status_list = payload["status_list"]

@@ -15,8 +15,8 @@ without padding in JWT form (raw compressed bytes in CWT form).
 CWT tokens are RFC 9052 COSE_Sign1 (tag 18): ES256 over the `Signature1`
 Sig_structure, a 64-byte `r || s` signature, and the country `kid` (for
 example `EU-status-list`) in the unprotected header, matching the JWT `kid`.
-Status list CWTs carry `exp` (label 4) set to `iat` plus the HTTP `max-age`, so
-a cached token never outlives its expiry; status list JWTs stay without `exp`.
+Every Status List and Identifier List token, JWT and CWT alike, carries `exp`
+(CWT label 4) and `ttl` (CWT label 65534); see [Token lifetime](#token-lifetime).
 
 The issuer, credential registry, debug endpoint, reset endpoint, and verifier
 endpoint are simplified test infrastructure. They are not EUDI issuance,
@@ -149,6 +149,36 @@ python /app/seed.py --base-url http://127.0.0.1:8000
 
 The command seeds the rich multi-country fixture. Add `--simple` for the
 legacy single-pool fixture.
+
+## Token lifetime
+
+`STATUS_LIST_TTL_SECONDS` (default `43200`, 12 h) sets the lifetime of every
+list token. Each response is signed on request with `exp = iat + ttl`, a `ttl`
+claim of the same value, and `Cache-Control: max-age=<seconds until exp>`, so
+the HTTP header, the `ttl` claim and the `exp` claim all end at the same
+instant. The weak `ETag` names the format, list version and `exp` of the
+served token: a `304` is returned only while that copy is current and
+unexpired, with `max-age` set to its remaining lifetime, so revalidation never
+keeps a token alive past its `exp`. An invalid value stops startup.
+
+draft-ietf-oauth-status-list-21 lets consumers cache by `ttl` or HTTP headers
+at their discretion, but `exp` MUST be checked. A revocation therefore reaches
+every conformant consumer, wallet or verifier, within one lifetime, whatever
+its caching policy. For a quick end-to-end revocation test, shorten the
+lifetime on a test deployment:
+
+```sh
+docker run --rm -p 8000:8000 -e STATUS_LIST_TTL_SECONDS=120 capture-status-list
+```
+
+and run two flows, each waiting the lifetime plus a margin for clock skew
+(for example 30–60 s):
+
+- revoked: issue, revoke, wait, present; the presentation must fail;
+- control: issue, wait, present; the presentation must succeed.
+
+The control separates a consumer that observed the revocation from one that
+fails because it mishandles short-lived or expired list tokens.
 
 ## Design
 

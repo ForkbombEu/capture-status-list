@@ -209,7 +209,7 @@ class InMemoryIssuer:
     def verification_result(self, credential_id: str) -> str | None:
         return self.verification_results.get(credential_id)
 
-    def status_list_token(self, private_key_pem: str) -> str:
+    def status_list_token(self, private_key_pem: str, issued_at: int | None = None) -> str:
         return generate_status_list_token(
             self.statuses,
             private_key_pem=private_key_pem,
@@ -218,6 +218,7 @@ class InMemoryIssuer:
             kid=KEY_ID,
             bits=DEFAULT_BITS,
             aggregation_uri=STATUS_LIST_AGGREGATION_URI,
+            issued_at=issued_at,
         )
 
 
@@ -283,8 +284,8 @@ def debug_status_at(idx: int) -> str:
     return issuer_state.debug_status(idx)
 
 
-def generate_current_status_list_token() -> str:
-    return issuer_state.status_list_token(key_store.private_pem())
+def generate_current_status_list_token(issued_at: int | None = None) -> str:
+    return issuer_state.status_list_token(key_store.private_pem(), issued_at=issued_at)
 
 
 def list_version() -> int:
@@ -367,7 +368,15 @@ def eudi_allocated_entries():
     return eudi_registry.allocated_entries()
 
 
-def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]:
+def eudi_list_version(uri: str) -> int:
+    """Version of a country × doctype list; bumps on every status change."""
+    _, state = eudi_registry.get_by_uri(uri)
+    return state.version
+
+
+def build_eudi_token(
+    uri: str, format_name: str, issued_at: int | None = None
+) -> tuple[bytes | str, str]:
     kind, state = eudi_registry.get_by_uri(uri)
     material = material_for(state.country)
     try:
@@ -378,7 +387,7 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
         # endpoint; production deployments should provide EUDI_KEY_DIR.
         private_pem = key_store.private_pem()
     certificate = material.certificate_der
-    now = int(time.time())
+    now = int(time.time()) if issued_at is None else issued_at
     if kind == TOKEN_LIST_KIND:
         if format_name == "jwt":
             token = generate_status_list_token(
@@ -388,18 +397,16 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
                 subject=uri,
                 kid=material.kid,
                 certificate_der=certificate,
-                include_exp=False,
                 aggregation_uri=STATUS_LIST_AGGREGATION_URI,
+                issued_at=now,
             )
         else:
             compressed = zlib.compress(pack_status_values(state.statuses), level=9)
             payload = {
                 2: uri,
-                # exp (4) is required by mdoc status verifiers; it covers the
-                # HTTP max-age so a cached token never outlives its exp.
                 4: now + TOKEN_TTL_SECONDS,
                 6: now,
-                65534: 3600,
+                65534: TOKEN_TTL_SECONDS,
                 65533: {
                     "bits": DEFAULT_BITS,
                     "lst": compressed,
@@ -413,8 +420,8 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
                 certificate,
                 kid=material.kid,
             )
-            return token, STATUS_LIST_CWT_MEDIA_TYPE, state.version
-        return token, "application/statuslist+jwt", state.version
+            return token, STATUS_LIST_CWT_MEDIA_TYPE
+        return token, "application/statuslist+jwt"
 
     if format_name == "jwt":
         token = generate_identifier_list_token(
@@ -424,9 +431,17 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
             subject=uri,
             kid=material.kid,
             certificate_der=certificate,
+            issued_at=now,
         )
     else:
-        payload = {1: ISSUER.rstrip("/"), 2: uri, 6: now, 65533: state.identifiers}
+        payload = {
+            1: ISSUER.rstrip("/"),
+            2: uri,
+            4: now + TOKEN_TTL_SECONDS,
+            6: now,
+            65534: TOKEN_TTL_SECONDS,
+            65533: state.identifiers,
+        }
         token = encode_cwt(
             payload,
             private_pem,
@@ -434,8 +449,8 @@ def build_eudi_token(uri: str, format_name: str) -> tuple[bytes | str, str, int]
             certificate,
             kid=material.kid,
         )
-        return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE, state.version
-    return token, "application/identifierlist+jwt", state.version
+        return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE
+    return token, "application/identifierlist+jwt"
 
 
 def reset_eudi_registry() -> None:

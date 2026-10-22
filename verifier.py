@@ -69,21 +69,6 @@ def _x5c_public_key(header: dict) -> str | None:
     )
 
 
-def _required_claims(status_list_token: str) -> list[str]:
-    """Require ``exp`` only when the token declares it.
-
-    Country × doctype Token Status Lists are served without ``exp`` (see
-    ``include_exp`` in :func:`issuer.build_eudi_token`), while the legacy mock
-    list token always carries one. PyJWT validates a present ``exp`` regardless.
-    """
-
-    claims = jwt.decode(status_list_token, options={"verify_signature": False})
-    required = ["sub", "iat", "status_list"]
-    if "exp" in claims:
-        required.append("exp")
-    return required
-
-
 def decode_status_list_token(
     status_list_token: str,
     *,
@@ -99,7 +84,7 @@ def decode_status_list_token(
             status_list_token,
             public_key or _x5c_public_key(header) or public_key_pem(),
             algorithms=["ES256"],
-            options={"require": _required_claims(status_list_token)},
+            options={"require": ["sub", "iat", "exp", "status_list"]},
         )
     except VerificationError:
         raise

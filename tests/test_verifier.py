@@ -124,8 +124,6 @@ def test_eudi_status_list_token_verifies_with_its_x5c_certificate(
     header = jwt.get_unverified_header(token)
     assert header["kid"] == "EU-status-list"
     assert header["x5c"]
-    # EUDI lists are served without exp; the verifier must not require it.
-    assert "exp" not in jwt.decode(token, options={"verify_signature": False})
 
     assert check_status(idx, token, expected_subject=uri) == "VALID"
 

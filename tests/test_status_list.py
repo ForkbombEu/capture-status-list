@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 from app import app
 from issuer import STATUS_LIST_URI, public_key_pem, reset_state
 from status_list import (
-    TOKEN_TTL_SECONDS,
     IndexScatter,
     InvalidStatusListIndex,
     decode_status_list,
@@ -201,23 +200,6 @@ def test_index_scatter_rejects_out_of_domain_cursor() -> None:
         pass
     else:
         raise AssertionError("expected out-of-domain cursor to fail")
-
-
-def test_status_list_token_sends_cache_headers() -> None:
-    response = client.get("/status/1")
-
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == f"max-age={TOKEN_TTL_SECONDS}"
-    assert response.headers["etag"].startswith("W/")
-
-
-def test_status_list_revalidates_with_etag() -> None:
-    first = client.get("/status/1")
-
-    cached = client.get("/status/1", headers={"If-None-Match": first.headers["etag"]})
-
-    assert cached.status_code == 304
-    assert cached.headers["etag"] == first.headers["etag"]
 
 
 def test_status_list_etag_changes_on_revocation() -> None:

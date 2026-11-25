@@ -19,15 +19,9 @@ def test_console_is_served_at_the_root() -> None:
     assert "Token status list console" in response.text
     assert "/brand/style.css" in response.text
     assert "/brand/logos/credimi_logo-transp.svg" in response.text
-    assert "/credentials/random-batch" in response.text
-    assert "/verify-batch" in response.text
     assert "/debug/status-list" in response.text
     assert "/debug/status-lists" in response.text
     assert "/token_status_list/take" in response.text
-    assert "identifier-list" in response.text
-    assert 'id="country"' in response.text
-    assert 'id="doctype"' in response.text
-    assert 'id="expiry-date"' in response.text
     assert 'id="allocation-count"' in response.text
     assert 'id="allocation-rows"' in response.text
     assert 'id="lst-bitmap-scroll"' in response.text
@@ -78,8 +72,8 @@ def test_footer_links_to_the_repository() -> None:
 def test_registry_inventory_carries_no_row_actions() -> None:
     html = client.get("/").text
 
-    # The inventory lists the legacy list and the country × doctype pools; a
-    # click on a row chooses it, and the raw token previews are gone with the buttons.
+    # The inventory lists the country × doctype pools; a click on a row
+    # chooses it, and the raw token previews are gone with the buttons.
     assert 'data-preview=' not in html
     assert 'data-work-uri=' not in html
     assert "<th>Token formats</th>" not in html
@@ -100,21 +94,26 @@ def test_console_declares_the_working_list_context() -> None:
     assert 'id="new-list-toggle" class="btn btn-sm btn-primary"' in html
     assert 'id="new-list-form" class="mt-4" hidden' in html
     assert 'id="new-list" class="btn btn-md btn-primary"' in html
-    # Panels are gated on the working list: the registry stays on screen, the
-    # credential panel and the allocated-entry panel belong to one list each.
+    # The working-list card stays hidden until a list is chosen; its Entries tab
+    # tops the list up and lists the entries, whose country, doctype and URI
+    # live in the card title and the Token tab rather than in every row.
     assert 'id="working-card" aria-labelledby="working-title" hidden' in html
-    assert 'id="legacy-panel" hidden' in html
-    assert 'id="allocation-panel" hidden' in html
-    assert html.index('id="allocation-panel"') < html.index('id="allocation-rows"')
-    credentials_panel = html[html.index('id="legacy-panel"') : html.index('id="allocation-panel"')]
-    assert 'id="count"' in credentials_panel
-    assert 'id="create"' in credentials_panel
-    entries_panel = html[html.index('id="allocation-panel"') : html.index('id="token-panel"')]
+    entries_panel = html[html.index('id="entries-panel"') : html.index('id="token-panel"')]
     assert 'id="entries-count"' in entries_panel
     assert 'id="add-entries"' in entries_panel
-    # Country, doctype and URI are shared by every entry, so they sit above the table.
-    assert 'id="pool-uri"' in entries_panel
     assert "<th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th>" in entries_panel
+
+
+def test_token_tab_sets_the_encoded_jwt_beside_its_decoded_parts() -> None:
+    html = client.get("/").text
+
+    token_panel = html[html.index('id="token-panel"') : html.index('id="key-panel"')]
+    # The list URI opens the served token in a new tab.
+    assert '<a class="text-sm mono" id="lst-uri" target="_blank" rel="noreferrer">' in token_panel
+    columns = token_panel[token_panel.index('class="jwt-columns"') :]
+    assert columns.index('id="jwt"') < columns.index('id="jwt-header"') < columns.index('id="jwt-payload"')
+    # The signing-key tab renders the decoded x5c chain next to the JWKS.
+    assert 'id="x5c"' in html[html.index('id="key-panel"') :]
 
 
 def test_console_pages_are_not_cached() -> None:

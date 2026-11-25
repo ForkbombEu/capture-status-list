@@ -316,10 +316,11 @@ curl http://localhost:8000/token_status_list/aggregation
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
 the console, and `GET /debug/status-list` decodes one of them:
 `?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
-out decodes the legacy `/status/1` list. The console uses that selector for its
-`TSL · JWT` and `TSL · CWT` previews and after revoking an allocated entry, so a
-revocation made through the API shows up in the decoded status list, not only in
-the allocated-entry table.
+out decodes the legacy `/status/1` list. The response also carries the token
+header's `x5c` chain decoded (subject, issuer, serial number, validity, SHA-256
+fingerprint, PEM). The console decodes the chosen list with it, so a revocation
+made through the API shows up in the decoded status list, not only in the
+entries table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
 endpoint, and starts or tops up pools through a second one:
@@ -336,23 +337,22 @@ curl -X POST http://localhost:8000/dashboard/status-lists \
 The reference-compatible `take` and `set` endpoints remain API-key-protected.
 
 Every allocated country × doctype pool is a resource of its own: revoking an
-entry there does not touch the legacy `/status/1` list. The console therefore
-works on one list at a time. `Country × doctype lists` is the inventory and the
-chooser: it lists every pool as a plain table with no row buttons, `Operate on`
-selects the list to work with, and the green `New status list` button opens a
-country / doctype / expiry form that allocates a pool and switches to it. The
-panels below the inventory then belong to the chosen list:
+entry there does not touch the legacy `/status/1` list, which the console does
+not show; it remains available through the API below. The console works on one
+pool at a time:
 
-- nothing selected — only the inventory;
-- the legacy list — the credentials panel (verification plus its own batch
-  insert, which creates `/status/1` credentials and one paired entry each) and
-  the decoded `/status/1` token;
-- an allocated pool — that pool's allocated entries with `Add entries to this
-  list` (indices only, no credentials) and the decoded token for the pool.
+- `Country × doctype lists` is the inventory and the chooser: click a row (or
+  press Enter on it) to work on that pool. `New status list` opens a country /
+  doctype / expiry form that allocates a pool and switches to it; `Reset state`
+  wipes every list.
+- The chosen pool opens in one panel titled with its country and doctype, with
+  three tabs: `Entries` (`Add entries to this list` plus every allocated entry,
+  each with its own `Revoke`), `Token` (the list URI as a link, the encoded JWT
+  beside its decoded header and payload, then the inflated `lst`), and
+  `Signing key` (the JWKS and the decoded `x5c` chain).
 
-The picker labels each option with its revoked count, starts unselected, and is
-the only thing that moves the console between lists. A pool that disappears
-(state reset, server restart) drops back to the unselected view.
+A pool that disappears (state reset, server restart) drops back to the
+unselected view. Failures show in one dismissible alert.
 
 Create a test credential:
 

@@ -86,7 +86,6 @@ APP_CSS = """
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
-    .batch-card { max-width: none; }
     .batch-fields {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -119,22 +118,14 @@ APP_CSS = """
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
 
-    .credential-scroll {
+    .entries-scroll {
       max-height: 420px;
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--bg);
     }
-    .credential-scroll .test-table-wrap { overflow: visible; }
-    .decoded-credentials-scroll {
-      max-height: 420px;
-      overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--bg);
-    }
-    .decoded-credentials-scroll .test-table-wrap { overflow: visible; }
+    .entries-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
       border-color: var(--brand-primary);
@@ -202,8 +193,7 @@ APP_CSS = """
       cursor: not-allowed;
     }
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .btn-stack { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
-    .btn-row .btn, .btn-stack .btn { justify-content: center; }
+    .btn-row .btn { justify-content: center; }
 
     .metric-grid {
       display: grid;
@@ -220,17 +210,11 @@ APP_CSS = """
 
     .test-table { min-width: 680px; }
     .test-table td { vertical-align: middle; }
-    .test-table input[type="checkbox"] {
-      accent-color: var(--brand-primary);
-      width: 16px;
-      height: 16px;
-    }
     .test-table td.cell-mono {
       font-family: var(--font-mono);
       font-size: var(--fs-xs);
       white-space: nowrap;
     }
-    .test-table td.cell-select { width: 32px; }
     .test-table tr.revoked td { background: var(--destructive-bg); }
     .test-table .empty-row td {
       color: var(--fg-subtle);
@@ -241,12 +225,8 @@ APP_CSS = """
     .status-valid::before { background: var(--success); }
     .status-revoked { background: var(--destructive-bg); color: var(--destructive); }
     .status-revoked::before { background: var(--destructive); }
-    .status-accept { background: var(--success-bg); color: var(--success); }
-    .status-accept::before { background: var(--success); }
     .status-reject { background: var(--destructive-bg); color: var(--destructive); }
     .status-reject::before { background: var(--destructive); }
-    .status-unchecked { background: var(--bg-muted); color: var(--fg-subtle); }
-    .status-unchecked::before { background: var(--fg-muted); }
 
     .output {
       min-height: 96px;
@@ -256,8 +236,19 @@ APP_CSS = """
     }
 
     /* Status list token: the three JWT segments, each on its own brand
-       colour, plus the decoded views underneath. */
-    #token-card { scroll-margin-top: calc(var(--topbar-height) + var(--space-4)); }
+       colour. The Token tab sets the encoded JWT beside its decoded header and
+       payload, as jwt.io does; narrow screens stack them. */
+    .jwt-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-6);
+      align-items: start;
+    }
+    .jwt-columns > * { min-width: 0; }
+    .jwt-decoded pre { max-height: 360px; overflow: auto; }
+    @media (max-width: 900px) {
+      .jwt-columns { grid-template-columns: 1fr; }
+    }
     .jwt { font-size: var(--fs-sm); }
     .jwt-header { color: var(--brand-primary); font-weight: 600; }
     .jwt-payload { color: var(--brand-accent-vivid); font-weight: 600; }
@@ -480,9 +471,9 @@ APP_CSS = """
       font-weight: 600;
     }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-    #pool-details dd { overflow-wrap: anywhere; }
-    /* The Entries tab carries one count chip per list kind; only one shows. */
-    .count-chip[hidden] { display: none; }
+    /* Signing key tab: one block per x5c certificate, long DNs wrap. */
+    #x5c dd { overflow-wrap: anywhere; }
+    .x5c-certificate + .x5c-certificate { margin-top: var(--space-6); }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -676,7 +667,7 @@ def _hero_band(title: str, description: str) -> str:
 _CONSOLE_BODY = (
     _hero_band(
         "Token status list console",
-        "Create test credentials, revoke selected entries, and verify them against the"
+        "Allocate country × doctype status lists, revoke their entries, and inspect the"
         " signed Status List Token.",
     )
     + """
@@ -697,12 +688,12 @@ _CONSOLE_BODY = (
         <div class="panel-head">
           <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
           <div class="btn-row">
+            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
             <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
             <button id="new-list-toggle" class="btn btn-sm btn-primary" aria-expanded="false" aria-controls="new-list-form">New status list</button>
           </div>
         </div>
-        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Click a list to operate on it: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
-        <p class="text-sm text-muted mt-4" id="ctx-scope">No list selected yet: click a list to operate on it.</p>
+        <p class="text-sm text-muted" id="ctx-scope">No list selected yet: click a list to operate on it.</p>
         <div id="new-list-form" class="mt-4" hidden>
           <div class="batch-fields">
             <div>
@@ -739,176 +730,97 @@ _CONSOLE_BODY = (
           </div>
         </div>
         <div class="tabs" role="tablist" id="working-tabs" aria-label="Working list views">
-          <button class="tab-btn active" type="button" role="tab" id="tab-entries" data-tab="entries" aria-selected="true" aria-controls="entries-panel"><span id="tab-entries-label">Entries</span> <span id="row-count" class="count-chip">0</span><span id="allocation-count" class="count-chip">0</span></button>
+          <button class="tab-btn active" type="button" role="tab" id="tab-entries" data-tab="entries" aria-selected="true" aria-controls="entries-panel">Entries <span id="allocation-count" class="count-chip">0</span></button>
           <button class="tab-btn" type="button" role="tab" id="tab-token" data-tab="token" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
           <button class="tab-btn" type="button" role="tab" id="tab-key" data-tab="key" aria-selected="false" aria-controls="key-panel" tabindex="-1">Signing key</button>
         </div>
 
         <div role="tabpanel" id="entries-panel" aria-labelledby="tab-entries">
-        <div id="legacy-panel" hidden>
-        <div class="flex-between gap-3 mb-4">
-          <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
-          <div class="btn-row">
-            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
-            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
+          <div class="batch-fields">
+            <div>
+              <label class="field-label" for="entries-count">Count</label>
+              <input id="entries-count" type="number" min="1" max="500" value="10">
+            </div>
+            <div>
+              <label class="field-label" for="entries-expiry">Entry expiry</label>
+              <input id="entries-expiry" type="date" value="2099-12-31">
+            </div>
           </div>
-        </div>
-        <div class="batch-fields">
-          <div>
-            <label class="field-label" for="count">Count</label>
-            <input id="count" type="number" min="1" max="500" value="10">
+          <div class="btn-row mt-4 mb-4">
+            <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
           </div>
-          <div>
-            <label class="field-label" for="prefix">Credential prefix</label>
-            <input id="prefix" type="text" value="cred">
+          <div class="entries-scroll">
+            <div class="test-table-wrap">
+              <table class="test-table">
+                <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="allocation-rows"></tbody>
+              </table>
+            </div>
           </div>
-          <div>
-            <label class="field-label" for="country">Country</label>
-            <input id="country" type="text" value="EU" maxlength="16">
-          </div>
-          <div>
-            <label class="field-label" for="doctype">Doctype</label>
-            <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-          </div>
-          <div>
-            <label class="field-label" for="expiry-date">List expiry</label>
-            <input id="expiry-date" type="date" value="2099-12-31">
-          </div>
-        </div>
-        <div class="btn-row mt-4 mb-4">
-          <button id="create" class="btn btn-md btn-primary">Create random batch</button>
-        </div>
-        <div class="btn-row mb-4">
-          <button id="all" class="btn btn-sm btn-outline">Select all</button>
-          <button id="none" class="btn btn-sm btn-outline">Select none</button>
-          <button id="verify" class="btn btn-sm btn-secondary">Verify selected</button>
-          <button id="revoke" class="btn btn-sm btn-destructive">Revoke selected</button>
-        </div>
-        <div class="credential-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead>
-                <tr>
-                  <th><span class="text-xs">Pick</span></th>
-                  <th>Credential</th>
-                  <th>Index</th>
-                  <th>Status</th>
-                  <th>Verification</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
-        </div>
-
-        <div id="allocation-panel" hidden>
-        <p class="text-sm text-muted">Entries of the working list. They carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
-        <dl class="dl mt-4" id="pool-details">
-          <dt>Country</dt><dd class="mono" id="pool-country"></dd>
-          <dt>Doctype</dt><dd class="mono" id="pool-doctype"></dd>
-          <dt>Status list URI</dt><dd class="mono" id="pool-uri"></dd>
-        </dl>
-        <div class="batch-fields">
-          <div>
-            <label class="field-label" for="entries-count">Count</label>
-            <input id="entries-count" type="number" min="1" max="500" value="10">
-          </div>
-          <div>
-            <label class="field-label" for="entries-expiry">Entry expiry</label>
-            <input id="entries-expiry" type="date" value="2099-12-31">
-          </div>
-        </div>
-        <div class="btn-row mt-4 mb-4">
-          <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
-        </div>
-        <div class="credential-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody id="allocation-rows"></tbody>
-            </table>
-          </div>
-        </div>
-        </div>
         </div>
 
         <div role="tabpanel" id="token-panel" aria-labelledby="tab-token" hidden>
-        <div class="flex-between gap-3 mb-4">
-          <p class="text-sm text-muted" id="lst-scope"></p>
-          <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
-        </div>
-        <p class="jwt-legend">
-          <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
-          <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
-          <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
-        </p>
-        <pre class="output jwt" id="jwt"></pre>
+          <div class="flex-between gap-3 mb-4">
+            <a class="text-sm mono" id="lst-uri" target="_blank" rel="noreferrer"></a>
+            <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
+          </div>
+          <div class="jwt-columns">
+            <div>
+              <p class="eyebrow">Encoded</p>
+              <p class="jwt-legend">
+                <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
+                <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
+                <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
+              </p>
+              <pre class="output jwt" id="jwt"></pre>
+            </div>
+            <div class="jwt-decoded">
+              <p class="eyebrow">Decoded header</p>
+              <pre id="jwt-header"></pre>
+              <p class="eyebrow mt-4">Decoded payload</p>
+              <pre id="jwt-payload"></pre>
+              <p class="lst-note" id="lst-note"></p>
+            </div>
+          </div>
 
-        <h4 class="subsection-heading subhead">Decoded token</h4>
-        <div class="decoded-grid">
-          <div>
-            <p class="eyebrow">Header</p>
-            <pre id="jwt-header"></pre>
+          <h4 class="subsection-heading subhead">Status list</h4>
+          <div class="metric-grid">
+            <div class="card">
+              <strong class="metric-value" id="lst-bits">0</strong>
+              <span class="eyebrow">Bits per entry</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-size">0</strong>
+              <span class="eyebrow">Entries</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-valid">0</strong>
+              <span class="eyebrow">Valid</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-revoked">0</strong>
+              <span class="eyebrow">Revoked</span>
+            </div>
           </div>
-          <div>
-            <p class="eyebrow">Payload</p>
-            <pre id="jwt-payload"></pre>
-            <p class="lst-note" id="lst-note"></p>
+          <p class="eyebrow mt-4">Inflated lst spectrum</p>
+          <div class="bitmap-shell">
+            <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
+              <div class="bitmap" id="lst-bitmap"></div>
+            </div>
+            <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
+              <div class="bitmap-minimap" id="lst-minimap"></div>
+            </div>
           </div>
-        </div>
-
-        <h4 class="subsection-heading subhead">Status list</h4>
-        <div class="metric-grid">
-          <div class="card">
-            <strong class="metric-value" id="lst-bits">0</strong>
-            <span class="eyebrow">Bits per entry</span>
-          </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-size">0</strong>
-            <span class="eyebrow">Entries</span>
-          </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-valid">0</strong>
-            <span class="eyebrow">Valid</span>
-          </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-revoked">0</strong>
-            <span class="eyebrow">Revoked</span>
-          </div>
-        </div>
-        <p class="eyebrow mt-4">Inflated lst spectrum</p>
-        <div class="bitmap-shell">
-          <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
-            <div class="bitmap" id="lst-bitmap"></div>
-          </div>
-          <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
-            <div class="bitmap-minimap" id="lst-minimap"></div>
-          </div>
-        </div>
-        <p class="bitmap-caption" id="lst-caption"></p>
-        <p class="eyebrow mt-4">Revoked indices</p>
-        <p class="index-list" id="lst-indices">None</p>
-        <div class="decoded-credentials-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead>
-                <tr>
-                  <th>Credential</th>
-                  <th>Index</th>
-                  <th>Decoded status</th>
-                </tr>
-              </thead>
-              <tbody id="lst-rows"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="btn-row mt-4" id="assignment-pagination"></div>
+          <p class="bitmap-caption" id="lst-caption"></p>
+          <p class="eyebrow mt-4">Revoked indices</p>
+          <p class="index-list" id="lst-indices">None</p>
         </div>
 
         <div role="tabpanel" id="key-panel" aria-labelledby="tab-key" hidden>
-        <p class="eyebrow" id="jwks-label">JWKS · /.well-known/jwks.json</p>
-        <pre id="jwks"></pre>
+          <p class="eyebrow">JWKS · list signer key</p>
+          <pre id="jwks"></pre>
+          <h4 class="subsection-heading subhead">x5c certificate chain</h4>
+          <div id="x5c"></div>
         </div>
       </section>
 
@@ -1039,23 +951,20 @@ _SHARED_SCRIPT = """<script>
 
 
 _CONSOLE_SCRIPT = """<script>
-    const rows = document.querySelector("#rows");
     const registryRows = document.querySelector("#registry-rows");
     const registryCount = document.querySelector("#registry-count");
     const allocationRows = document.querySelector("#allocation-rows");
     const allocationCount = document.querySelector("#allocation-count");
+    const workingCard = document.querySelector("#working-card");
     const notice = document.querySelector("#notice");
-    const rowCount = document.querySelector("#row-count");
-    let credentials = [];
-    let verification = {};
+    const jwtBox = document.querySelector("#jwt");
+    const copyButton = document.querySelector("#copy-token");
     let allocations = [];
     let registry = [];
-
-    function selectedIds() {
-      return [...document.querySelectorAll("tbody input:checked")]
-        .map((box) => credentials[Number(box.value)]?.credential_id)
-        .filter(Boolean);
-    }
+    let currentToken = "";
+    // The working list the whole console is scoped to: null until the
+    // operator clicks a list in the registry.
+    let activeListUri = null;
 
     function describe(value) {
       if (typeof value === "string") return value;
@@ -1098,56 +1007,13 @@ _CONSOLE_SCRIPT = """<script>
       return body;
     }
 
-    let visibleRows = 100;
-
-    function render() {
-      const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
-      rowCount.textContent = credentials.length;
-
-      if (!credentials.length) {
-        rows.innerHTML = `<tr class="empty-row"><td colspan="5">No credentials yet. Create a random batch to start.</td></tr>`;
-        return;
-      }
-
-      const shown = credentials.slice(0, visibleRows);
-      rows.innerHTML = shown.map((item, index) => {
-        const safeCredentialId = escapeHtml(item.credential_id);
-        const checked = selectedIndexes.has(String(index)) ? "checked" : "";
-        const key = item.credential_id;
-        const state = item.status.toLowerCase();
-        const result = verification[key]
-          ? `<span class="status-chip status-${escapeHtml(verification[key].result.toLowerCase())}">${escapeHtml(verification[key].result)} · ${escapeHtml(verification[key].status)}</span>`
-          : `<span class="status-chip status-unchecked">Not verified</span>`;
-        return `<tr class="${state}">
-          <td class="cell-select"><input type="checkbox" value="${index}" ${checked} aria-label="Select ${safeCredentialId}"></td>
-          <td class="cell-mono">${safeCredentialId}</td>
-          <td class="cell-mono">${item.idx}</td>
-          <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
-          <td>${result}</td>
-        </tr>`;
-      }).join("") + (visibleRows < credentials.length
-        ? `<tr class="show-more-row"><td colspan="5">
-            <button id="show-more" class="btn btn-sm btn-outline" type="button">Show more (${visibleRows} of ${credentials.length})</button>
-          </td></tr>`
-        : "");
-      const showMore = document.querySelector("#show-more");
-      if (showMore) showMore.onclick = () => {
-        visibleRows = Math.min(credentials.length, visibleRows + 200);
-        render();
-      };
+    function workingPool() {
+      return registry.find((item) => item.status_list_uri === activeListUri) || null;
     }
 
+    // The Entries tab is the working list's own inventory.
     function renderAllocations() {
-      // The panel is the working list's own inventory: a legacy context has no
-      // allocated entries, a pool context shows exactly that pool's entries.
-      // Country, doctype and URI are the pool's own, so they sit above the table.
-      const pool = workingPool();
-      document.querySelector("#pool-country").textContent = pool ? pool.country : "";
-      document.querySelector("#pool-doctype").textContent = pool ? pool.doctype : "";
-      document.querySelector("#pool-uri").textContent = pool ? pool.status_list_uri : "";
-      const entries = activeListUri
-        ? allocations.filter((item) => item.status_list_uri === activeListUri)
-        : [];
+      const entries = allocations.filter((item) => item.status_list_uri === activeListUri);
       allocationCount.textContent = entries.length;
       allocationRows.innerHTML = entries.length
         ? entries.map((item) => {
@@ -1179,20 +1045,11 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     // The registry is both the inventory and the chooser: clicking a row makes
-    // that list the working list. The legacy /status/1 credential list comes first.
-    function renderRegistry(summaries) {
-      registryCount.textContent = summaries.length;
-      const legacyRevoked = credentials.filter((item) => item.status === "REVOKED").length;
-      const rowAttributes = (value) =>
-        `class="registry-row" tabindex="0" data-list="${escapeHtml(value)}"` +
-        (contextChosen && value === (activeListUri || "legacy") ? ' aria-current="true"' : "");
-      registryRows.innerHTML = `<tr ${rowAttributes("legacy")}>
-            <td colspan="2">Legacy credential list</td>
-            <td class="cell-mono">/status/1</td>
-            <td>${credentials.length}</td><td>${legacyRevoked}</td>
-            <td class="cell-mono">—</td><td>—</td>
-          </tr>` + (summaries.length
-        ? summaries.map((item) => `<tr ${rowAttributes(item.status_list_uri)}>
+    // that list the working list.
+    function renderRegistry() {
+      registryCount.textContent = registry.length;
+      registryRows.innerHTML = registry.length
+        ? registry.map((item) => `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}"${item.status_list_uri === activeListUri ? ' aria-current="true"' : ""}>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
@@ -1200,7 +1057,22 @@ _CONSOLE_SCRIPT = """<script>
             <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
           </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`);
+        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
+    }
+
+    // The working-list card follows the chosen list; the hint shows until one is chosen.
+    function renderContext() {
+      const pool = workingPool();
+      workingCard.hidden = !pool;
+      document.querySelector("#ctx-scope").hidden = Boolean(pool);
+      if (pool) {
+        document.querySelector("#working-title").textContent = `${pool.country} · ${pool.doctype}`;
+        document.querySelector("#working-meta").textContent =
+          `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
+          (pool.expired ? "expired" : `expires ${pool.expires || "—"}`);
+      }
+      renderRegistry();
+      renderAllocations();
     }
 
     async function load() {
@@ -1208,45 +1080,69 @@ _CONSOLE_SCRIPT = """<script>
         jsonFetch("/credentials"),
         jsonFetch("/debug/status-lists"),
       ]);
-      credentials = data.credentials;
       allocations = data.allocated_entries;
       registry = summaries;
-      verification = Object.fromEntries(
-        credentials
-          .filter((item) => item.verification_result)
-          .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
-      );
-      if (
-        contextChosen &&
-        activeListUri &&
-        !registry.some((item) => item.status_list_uri === activeListUri)
-      ) {
-        clearList();           // the pool is gone: state was reset or the server reloaded
-        return;
-      }
-      renderPanels();
+      // A list that disappears (state reset, server restart) drops the console
+      // back to the unselected view.
+      if (activeListUri && !workingPool()) activeListUri = null;
       renderContext();
-      render();
     }
 
-    // The credentials panel owns the credential batch: /status/1 credentials,
-    // each one paired with an entry in the country × doctype pool of the form.
-    document.querySelector("#create").onclick = () => guard(async () => {
-      await jsonFetch("/credentials/random-batch", {
-        method: "POST",
-        body: JSON.stringify({
-          count: Number(document.querySelector("#count").value || 10),
-          prefix: document.querySelector("#prefix").value || "cred",
-          country: document.querySelector("#country").value || "EU",
-          doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
-          expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
-        }),
-      });
-      await load();
-      await refreshCard();
-    });
+    async function showCard(uri) {
+      renderDecodedToken(await jsonFetch(`/debug/status-list?${new URLSearchParams({ uri })}`));
+    }
 
-    // The allocated-entry panel owns its pool's top-up: entries only.
+    async function refreshCard() {
+      if (activeListUri) await showCard(activeListUri);
+    }
+
+    // The single context switch: pick a list, then read its signed token.
+    async function selectList(uri) {
+      if (uri !== activeListUri) showTab("entries");
+      activeListUri = uri;
+      renderContext();
+      await showCard(uri);
+    }
+
+    // The working-list views: one tab visible at a time keeps the page short.
+    const tabs = [...document.querySelectorAll("#working-tabs [role=tab]")];
+    function showTab(name) {
+      for (const tab of tabs) {
+        const active = tab.dataset.tab === name;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        document.getElementById(tab.getAttribute("aria-controls")).hidden = !active;
+      }
+    }
+    tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
+    // Arrow keys move between tabs, as in the WAI-ARIA tabs pattern.
+    document.querySelector("#working-tabs").onkeydown = (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (!step) return;
+      const index = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+      const next = tabs[(index + step + tabs.length) % tabs.length];
+      showTab(next.dataset.tab);
+      next.focus();
+    };
+
+    function chooseRow(event) {
+      const row = event.target.closest("tr[data-list]");
+      if (!row) return;
+      guard(async () => {
+        await selectList(row.dataset.list);
+        // Re-rendering the registry drops focus; keyboard users keep their row.
+        if (event.type === "keydown") registryRows.querySelector('tr[aria-current="true"]')?.focus();
+      });
+    }
+    registryRows.onclick = chooseRow;
+    registryRows.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      chooseRow(event);
+    };
+
+    // Top-up of the working list: entries only, no credentials.
     document.querySelector("#add-entries").onclick = () => guard(async () => {
       const pool = workingPool();
       if (!pool) return notify("Click a country × doctype list first.", "info");
@@ -1289,162 +1185,12 @@ _CONSOLE_SCRIPT = """<script>
       await selectList(data.status_list_uri);
     });
 
-    document.querySelector("#revoke").onclick = () => guard(async () => {
-      const ids = selectedIds();
-      if (!ids.length) return notify("Select credentials first.", "info");
-      await jsonFetch("/credentials/revoke-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      await load();
-      await refreshCard();
-    });
-
-    document.querySelector("#verify").onclick = () => guard(async () => {
-      const ids = selectedIds();
-      if (!ids.length) return notify("Select credentials first.", "info");
-      const data = await jsonFetch("/verify-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      for (const item of data.verified || []) {
-        verification[item.credential_id] = { result: item.result, status: item.status };
-      }
-      render();
-      await refreshCard();
-    });
-
-    document.querySelector("#refresh").onclick = () => guard(load);
     document.querySelector("#registry-refresh").onclick = () => guard(load);
-    document.querySelector("#all").onclick = () => {
-      visibleRows = credentials.length;
-      render();
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
-    };
-    document.querySelector("#none").onclick = () => {
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = false; });
-    };
-    const workingCard = document.querySelector("#working-card");
-    const legacyPanel = document.querySelector("#legacy-panel");
-    const allocationPanel = document.querySelector("#allocation-panel");
-    const jwtBox = document.querySelector("#jwt");
-    const copyButton = document.querySelector("#copy-token");
-    let currentToken = "";
 
-    // The working list the whole console is scoped to. Nothing is selected
-    // until the operator picks one; null then means the legacy /status/1 list.
-    let activeListUri = null;
-    let contextChosen = false;
-
-    function statusListUrl(uri, offset, limit) {
-      const params = new URLSearchParams({
-        assignment_offset: String(offset),
-        assignment_limit: String(limit),
-      });
-      if (uri) params.set("uri", uri);
-      return `/debug/status-list?${params}`;
-    }
-
-    // Decoding never changes the working list: the card always shows it.
-    async function showCard(uri, offset = 0, limit = 100) {
-      const data = await jsonFetch(statusListUrl(uri, offset, limit));
-      renderDecodedToken(data);
-      return data;
-    }
-
-    async function refreshCard() {
-      if (!contextChosen) return;
-      await showCard(activeListUri);
-    }
-
-    // The registry stays on screen: it is both the inventory and the chooser.
-    // The working-list card follows the chosen list, one kind at a time.
-    function renderPanels() {
-      const pool = Boolean(activeListUri);
-      workingCard.hidden = !contextChosen;
-      legacyPanel.hidden = pool;
-      allocationPanel.hidden = !pool;
-      rowCount.hidden = pool;
-      allocationCount.hidden = !pool;
-      document.querySelector("#tab-entries-label").textContent = pool ? "Entries" : "Credentials";
-    }
-
-    function workingPool() {
-      return registry.find((item) => item.status_list_uri === activeListUri) || null;
-    }
-
-    function renderContext() {
-      document.querySelector("#ctx-scope").hidden = contextChosen;
-      if (contextChosen) {
-        const pool = workingPool();
-        const revoked = credentials.filter((item) => item.status === "REVOKED").length;
-        document.querySelector("#working-title").textContent = pool
-          ? `${pool.country} · ${pool.doctype}`
-          : "Legacy credential list";
-        document.querySelector("#working-meta").textContent = pool
-          ? `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
-            (pool.expired ? "expired" : `expires ${pool.expires || "—"}`)
-          : `/status/1 · ${credentials.length} credentials · ${revoked} revoked`;
-      }
-      renderRegistry(registry);
-      renderAllocations();
-    }
-
-    // The single context switch: pick a list, then read its signed token.
-    async function selectList(uri) {
-      if (!contextChosen || uri !== activeListUri) showTab("entries");
-      contextChosen = true;
-      activeListUri = uri;
-      renderPanels();
-      renderContext();
-      await showCard(uri);
-    }
-
-    function clearList() {
-      contextChosen = false;
-      activeListUri = null;
-      renderPanels();
-      renderContext();
-    }
-
-    // The working-list views: one tab visible at a time keeps the page short.
-    const tabs = [...document.querySelectorAll("#working-tabs [role=tab]")];
-    function showTab(name) {
-      for (const tab of tabs) {
-        const active = tab.dataset.tab === name;
-        tab.classList.toggle("active", active);
-        tab.setAttribute("aria-selected", String(active));
-        tab.tabIndex = active ? 0 : -1;
-        document.getElementById(tab.getAttribute("aria-controls")).hidden = !active;
-      }
-    }
-    tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
-    // Arrow keys move between tabs, as in the WAI-ARIA tabs pattern.
-    document.querySelector("#working-tabs").onkeydown = (event) => {
-      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
-      if (!step) return;
-      const index = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
-      const next = tabs[(index + step + tabs.length) % tabs.length];
-      showTab(next.dataset.tab);
-      next.focus();
-    };
-
-    function chooseRow(event) {
-      const row = event.target.closest("tr[data-list]");
-      if (!row) return;
-      const value = row.dataset.list;
-      guard(async () => {
-        await selectList(value === "legacy" ? null : value);
-        // Re-rendering the registry drops focus; keyboard users keep their row.
-        if (event.type === "keydown") registryRows.querySelector('tr[aria-current="true"]')?.focus();
-      });
-    }
-    registryRows.onclick = chooseRow;
-    registryRows.onkeydown = (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      chooseRow(event);
-    };
+    document.querySelector("#reset").onclick = () => guard(async () => {
+      await jsonFetch("/reset", { method: "POST" });
+      await load();          // every list is gone: the console falls back
+    });
 
     function renderJwt(token) {
       const [header, payload, signature] = token.split(".");
@@ -1456,58 +1202,41 @@ _CONSOLE_SCRIPT = """<script>
         `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
     }
 
-    function renderAssignments(data) {
-      const rows = document.querySelector("#lst-rows");
-      rows.innerHTML = data.assignments.length
-        ? data.assignments.map((item) => `<tr>
-            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
-            <td class="cell-mono">${item.idx}</td>
-            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">${activeListUri ? "This list is allocated through the status-list API; its entries carry no credential identifier." : "No credential is assigned to an index yet."}</td></tr>`;
-      const pagination = document.querySelector("#assignment-pagination");
-      pagination.innerHTML = "";
-      if (data.assignment_total <= data.assignment_limit) return;
-      const start = data.assignment_offset + 1;
-      const end = Math.min(data.assignment_total, data.assignment_offset + data.assignment_limit);
-      const label = document.createElement("span");
-      label.className = "text-sm text-muted";
-      label.textContent = `Showing ${start}–${end} of ${data.assignment_total}`;
-      pagination.append(label);
-      const previous = document.createElement("button");
-      previous.className = "btn btn-sm btn-outline";
-      previous.type = "button";
-      previous.textContent = "Previous";
-      previous.disabled = data.assignment_offset === 0;
-      previous.onclick = () => guard(() => showCard(
-        activeListUri,
-        Math.max(0, data.assignment_offset - data.assignment_limit),
-        data.assignment_limit,
-      ));
-      const next = document.createElement("button");
-      next.className = "btn btn-sm btn-outline";
-      next.type = "button";
-      next.textContent = "Next";
-      next.disabled = end >= data.assignment_total;
-      next.onclick = () => guard(() => showCard(
-        activeListUri,
-        data.assignment_offset + data.assignment_limit,
-        data.assignment_limit,
-      ));
-      pagination.append(previous, next);
-
+    // Dates read DD/MM/YYYY (DESIGN.md §15); certificate times add the UTC clock.
+    function formatUtc(iso) {
+      const at = new Date(iso);
+      const pad = (value) => String(value).padStart(2, "0");
+      return `${pad(at.getUTCDate())}/${pad(at.getUTCMonth() + 1)}/${at.getUTCFullYear()} ` +
+        `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())} UTC`;
     }
+
+    function renderCertificates(certificates) {
+      document.querySelector("#x5c").innerHTML = certificates.length
+        ? certificates.map((certificate, index) => `<div class="x5c-certificate">
+            <p class="eyebrow">Certificate ${index + 1} of ${certificates.length}${index === 0 ? " · signer" : ""}</p>
+            <dl class="dl mb-4">
+              <dt>Subject</dt><dd class="mono">${escapeHtml(certificate.subject)}</dd>
+              <dt>Issuer</dt><dd class="mono">${escapeHtml(certificate.issuer)}</dd>
+              <dt>Serial number</dt><dd class="mono">${escapeHtml(certificate.serial_number)}</dd>
+              <dt>Valid from</dt><dd>${formatUtc(certificate.not_before)}</dd>
+              <dt>Valid until</dt><dd>${formatUtc(certificate.not_after)}</dd>
+              <dt>SHA-256 fingerprint</dt><dd class="mono">${escapeHtml(certificate.sha256)}</dd>
+            </dl>
+            <pre>${escapeHtml(certificate.pem)}</pre>
+          </div>`).join("")
+        : '<p class="text-sm text-muted">This token carries no x5c header.</p>';
+    }
+
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
-      document.querySelector("#lst-scope").textContent =
-        `Working list: ${data.list_uri}`;
-      document.querySelector("#jwks-label").textContent = activeListUri
-        ? "JWKS · list signer certificate"
-        : "JWKS · /.well-known/jwks.json";
+      const link = document.querySelector("#lst-uri");
+      link.href = data.list_uri;
+      link.textContent = data.list_uri;
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
+      renderCertificates(data.x5c);
       document.querySelector("#lst-bits").textContent = data.bits;
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
@@ -1523,8 +1252,6 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-indices").textContent = shown.length
         ? shown.join(", ") + (rest > 0 ? `, and ${rest} more` : "")
         : "None";
-
-      renderAssignments(data);
     }
 
     copyButton.onclick = async () => {
@@ -1542,13 +1269,6 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-
-    document.querySelector("#reset").onclick = () => guard(async () => {
-      await jsonFetch("/reset", { method: "POST" });
-      verification = {};
-      await load();          // every pool is gone: the context falls back
-      await refreshCard();
-    });
 
     load().catch(notify);
   </script>"""

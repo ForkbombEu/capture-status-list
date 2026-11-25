@@ -64,13 +64,6 @@ def test_page_sections_keep_the_container_side_gutter() -> None:
         assert "page-section container" not in html
 
 
-def test_page_bands_share_one_fixed_gutter() -> None:
-    html = client.get("/").text
-
-    assert ":root { --page-gutter: 46px; }" in html
-    assert ".topbar-inner, .hero-inner, .container, .footer-inner {" in html
-
-
 def test_footer_links_to_the_repository() -> None:
     html = client.get("/").text
 

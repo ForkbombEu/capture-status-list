@@ -35,22 +35,24 @@ def test_console_is_served_at_the_root() -> None:
     assert 'bitmap-minimap-marker' in response.text
     assert 'bitmap-minimap-row-jump' in response.text
     assert 'button[data-row]' in response.text
-    assert 'document.querySelector("#token").onclick' in response.text
+    assert 'id="working-tabs"' in response.text
     assert 'id="new-list-toggle"' in response.text
     assert 'id="add-entries"' in response.text
 
 
 
-def test_console_stacks_its_panels_in_one_column() -> None:
+def test_console_shows_the_working_list_in_tabs() -> None:
     html = client.get("/").text
 
     assert '<section class="page-section" aria-labelledby="console-title">\n    <div class="container">' in html
     # The console shares the brand max-width so it lines up with the header.
     assert "console-container" not in html
-    # Lists, then the working list's panel, then its token.
-    assert html.index('id="registry-card"') < html.index('id="legacy-card"')
-    assert html.index('id="legacy-card"') < html.index('id="allocation-card"')
-    assert html.index('id="allocation-card"') < html.index('id="token-card"')
+    # Lists, then one working-list card whose views are tabs.
+    assert html.index('id="registry-card"') < html.index('id="working-card"')
+    assert html.index('id="working-card"') < html.index('id="entries-panel"')
+    assert html.index('id="entries-panel"') < html.index('id="token-panel"')
+    assert html.index('id="token-panel"') < html.index('id="key-panel"')
+    assert 'id="token-panel" aria-labelledby="tab-token" hidden' in html
     # Failures float in one dismissible alert instead of an output panel.
     assert 'id="notice" class="notice" role="alert" hidden' in html
 
@@ -100,13 +102,14 @@ def test_console_declares_the_working_list_context() -> None:
     assert 'id="new-list" class="btn btn-md btn-primary"' in html
     # Panels are gated on the working list: the registry stays on screen, the
     # credential panel and the allocated-entry panel belong to one list each.
-    assert 'id="legacy-card" hidden' in html
-    assert 'id="allocation-card" hidden' in html
-    assert html.index('id="allocation-card"') < html.index('id="allocation-rows"')
-    credentials_panel = html[html.index('id="legacy-card"') : html.index('id="allocation-card"')]
+    assert 'id="working-card" aria-labelledby="working-title" hidden' in html
+    assert 'id="legacy-panel" hidden' in html
+    assert 'id="allocation-panel" hidden' in html
+    assert html.index('id="allocation-panel"') < html.index('id="allocation-rows"')
+    credentials_panel = html[html.index('id="legacy-panel"') : html.index('id="allocation-panel"')]
     assert 'id="count"' in credentials_panel
     assert 'id="create"' in credentials_panel
-    entries_panel = html[html.index('id="allocation-card"') : html.index('id="token-card"')]
+    entries_panel = html[html.index('id="allocation-panel"') : html.index('id="token-panel"')]
     assert 'id="entries-count"' in entries_panel
     assert 'id="add-entries"' in entries_panel
     # Country, doctype and URI are shared by every entry, so they sit above the table.

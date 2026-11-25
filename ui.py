@@ -481,6 +481,8 @@ APP_CSS = """
     }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
     #pool-details dd { overflow-wrap: anywhere; }
+    /* The Entries tab carries one count chip per list kind; only one shows. */
+    .count-chip[hidden] { display: none; }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -700,7 +702,7 @@ _CONSOLE_BODY = (
           </div>
         </div>
         <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Click a list to operate on it: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
-        <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
+        <p class="text-sm text-muted mt-4" id="ctx-scope">No list selected yet: click a list to operate on it.</p>
         <div id="new-list-form" class="mt-4" hidden>
           <div class="batch-fields">
             <div>
@@ -729,16 +731,28 @@ _CONSOLE_BODY = (
         </div>
       </section>
 
-      <section class="card batch-card" id="legacy-card" hidden>
+      <section class="card" id="working-card" aria-labelledby="working-title" hidden>
         <div class="panel-head">
-          <h3 class="subsection-heading">Credentials <span id="row-count" class="count-chip">0</span></h3>
+          <div>
+            <h3 class="subsection-heading" id="working-title"></h3>
+            <p class="text-sm text-muted" id="working-meta"></p>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" id="working-tabs" aria-label="Working list views">
+          <button class="tab-btn active" type="button" role="tab" id="tab-entries" data-tab="entries" aria-selected="true" aria-controls="entries-panel"><span id="tab-entries-label">Entries</span> <span id="row-count" class="count-chip">0</span><span id="allocation-count" class="count-chip">0</span></button>
+          <button class="tab-btn" type="button" role="tab" id="tab-token" data-tab="token" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
+          <button class="tab-btn" type="button" role="tab" id="tab-key" data-tab="key" aria-selected="false" aria-controls="key-panel" tabindex="-1">Signing key</button>
+        </div>
+
+        <div role="tabpanel" id="entries-panel" aria-labelledby="tab-entries">
+        <div id="legacy-panel" hidden>
+        <div class="flex-between gap-3 mb-4">
+          <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
           <div class="btn-row">
             <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
             <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
-            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
           </div>
         </div>
-        <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
         <div class="batch-fields">
           <div>
             <label class="field-label" for="count">Count</label>
@@ -786,12 +800,9 @@ _CONSOLE_BODY = (
             </table>
           </div>
         </div>
-      </section>
-
-      <section class="card" id="allocation-card" hidden>
-        <div class="panel-head">
-          <h3 class="subsection-heading">Status list entries <span id="allocation-count" class="count-chip">0</span></h3>
         </div>
+
+        <div id="allocation-panel" hidden>
         <p class="text-sm text-muted">Entries of the working list. They carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
         <dl class="dl mt-4" id="pool-details">
           <dt>Country</dt><dd class="mono" id="pool-country"></dd>
@@ -819,24 +830,14 @@ _CONSOLE_BODY = (
             </table>
           </div>
         </div>
-      </section>
-
-      <div id="notice" class="notice" role="alert" hidden>
-        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-        <div>
-          <p class="notice-title" id="notice-title"></p>
-          <p class="notice-body" id="notice-body"></p>
         </div>
-        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
-      </div>
+        </div>
 
-      <section class="card" id="token-card" hidden>
-        <div class="panel-head">
-          <h3 class="subsection-heading">Status list token</h3>
+        <div role="tabpanel" id="token-panel" aria-labelledby="tab-token" hidden>
+        <div class="flex-between gap-3 mb-4">
+          <p class="text-sm text-muted" id="lst-scope"></p>
           <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
         </div>
-        <p class="text-sm text-muted" id="lst-scope"></p>
         <p class="jwt-legend">
           <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
           <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
@@ -903,11 +904,23 @@ _CONSOLE_BODY = (
           </div>
         </div>
         <div class="btn-row mt-4" id="assignment-pagination"></div>
+        </div>
 
-        <h4 class="subsection-heading subhead">Signing key</h4>
+        <div role="tabpanel" id="key-panel" aria-labelledby="tab-key" hidden>
         <p class="eyebrow" id="jwks-label">JWKS · /.well-known/jwks.json</p>
         <pre id="jwks"></pre>
+        </div>
       </section>
+
+      <div id="notice" class="notice" role="alert" hidden>
+        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <div>
+          <p class="notice-title" id="notice-title"></p>
+          <p class="notice-body" id="notice-body"></p>
+        </div>
+        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+      </div>
 
     </div>
     </div>
@@ -1311,10 +1324,9 @@ _CONSOLE_SCRIPT = """<script>
     document.querySelector("#none").onclick = () => {
       document.querySelectorAll("tbody input").forEach((box) => { box.checked = false; });
     };
-    const tokenCard = document.querySelector("#token-card");
-    const registryCard = document.querySelector("#registry-card");
-    const legacyCard = document.querySelector("#legacy-card");
-    const allocationCard = document.querySelector("#allocation-card");
+    const workingCard = document.querySelector("#working-card");
+    const legacyPanel = document.querySelector("#legacy-panel");
+    const allocationPanel = document.querySelector("#allocation-panel");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
     let currentToken = "";
@@ -1341,16 +1353,20 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     async function refreshCard() {
-      if (!contextChosen || tokenCard.hidden) return;
+      if (!contextChosen) return;
       await showCard(activeListUri);
     }
 
     // The registry stays on screen: it is both the inventory and the chooser.
-    // The other panels follow the chosen list, one kind at a time.
+    // The working-list card follows the chosen list, one kind at a time.
     function renderPanels() {
       const pool = Boolean(activeListUri);
-      legacyCard.hidden = !contextChosen || pool;
-      allocationCard.hidden = !contextChosen || !pool;
+      workingCard.hidden = !contextChosen;
+      legacyPanel.hidden = pool;
+      allocationPanel.hidden = !pool;
+      rowCount.hidden = pool;
+      allocationCount.hidden = !pool;
+      document.querySelector("#tab-entries-label").textContent = pool ? "Entries" : "Credentials";
     }
 
     function workingPool() {
@@ -1358,18 +1374,25 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     function renderContext() {
-      const pool = workingPool();
-      document.querySelector("#ctx-scope").textContent = !contextChosen
-        ? "No list selected yet: click a list to operate on it."
-        : activeListUri
-          ? `Working on ${activeListUri} — ${pool.allocated} allocated, ${pool.revoked} revoked, ${pool.expired ? "expired" : "active"}.`
-          : "Working on the legacy /status/1 credential list.";
+      document.querySelector("#ctx-scope").hidden = contextChosen;
+      if (contextChosen) {
+        const pool = workingPool();
+        const revoked = credentials.filter((item) => item.status === "REVOKED").length;
+        document.querySelector("#working-title").textContent = pool
+          ? `${pool.country} · ${pool.doctype}`
+          : "Legacy credential list";
+        document.querySelector("#working-meta").textContent = pool
+          ? `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
+            (pool.expired ? "expired" : `expires ${pool.expires || "—"}`)
+          : `/status/1 · ${credentials.length} credentials · ${revoked} revoked`;
+      }
       renderRegistry(registry);
       renderAllocations();
     }
 
     // The single context switch: pick a list, then read its signed token.
     async function selectList(uri) {
+      if (!contextChosen || uri !== activeListUri) showTab("entries");
       contextChosen = true;
       activeListUri = uri;
       renderPanels();
@@ -1380,10 +1403,31 @@ _CONSOLE_SCRIPT = """<script>
     function clearList() {
       contextChosen = false;
       activeListUri = null;
-      tokenCard.hidden = true;
       renderPanels();
       renderContext();
     }
+
+    // The working-list views: one tab visible at a time keeps the page short.
+    const tabs = [...document.querySelectorAll("#working-tabs [role=tab]")];
+    function showTab(name) {
+      for (const tab of tabs) {
+        const active = tab.dataset.tab === name;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        document.getElementById(tab.getAttribute("aria-controls")).hidden = !active;
+      }
+    }
+    tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
+    // Arrow keys move between tabs, as in the WAI-ARIA tabs pattern.
+    document.querySelector("#working-tabs").onkeydown = (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      if (!step) return;
+      const index = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+      const next = tabs[(index + step + tabs.length) % tabs.length];
+      showTab(next.dataset.tab);
+      next.focus();
+    };
 
     function chooseRow(event) {
       const row = event.target.closest("tr[data-list]");
@@ -1481,8 +1525,6 @@ _CONSOLE_SCRIPT = """<script>
         : "None";
 
       renderAssignments(data);
-
-      tokenCard.hidden = false;
     }
 
     copyButton.onclick = async () => {
@@ -1500,10 +1542,6 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-    document.querySelector("#token").onclick = () => guard(async () => {
-      await showCard(activeListUri);
-      tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
 
     document.querySelector("#reset").onclick = () => guard(async () => {
       await jsonFetch("/reset", { method: "POST" });

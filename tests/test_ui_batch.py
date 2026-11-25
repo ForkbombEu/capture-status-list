@@ -41,16 +41,16 @@ def test_console_is_served_at_the_root() -> None:
 
 
 
-def test_console_renders_results_panel_before_the_token() -> None:
+def test_console_stacks_its_panels_in_one_column() -> None:
     html = client.get("/").text
 
     assert '<section class="page-section" aria-labelledby="console-title">\n    <div class="container">' in html
     # The console shares the brand max-width so it lines up with the header.
     assert "console-container" not in html
-    assert 'class="console-grid"' in html
-    assert 'class="stack console-left"' in html
-    assert 'class="stack console-right"' in html
-    assert html.index('id="rows"') < html.index('id="out"')
+    # Lists, then the working list's panel, then the output, then its token.
+    assert html.index('id="registry-card"') < html.index('id="legacy-card"')
+    assert html.index('id="legacy-card"') < html.index('id="allocation-card"')
+    assert html.index('id="allocation-card"') < html.index('id="out"')
     assert html.index('id="out"') < html.index('id="token-card"')
 
 
@@ -75,8 +75,8 @@ def test_footer_links_to_the_repository() -> None:
 def test_registry_inventory_carries_no_row_actions() -> None:
     html = client.get("/").text
 
-    # The inventory is a plain list of country × doctype pools; choosing one is
-    # the picker's job, and the raw token previews are gone with the buttons.
+    # The inventory lists the legacy list and the country × doctype pools; a
+    # click on a row chooses it, and the raw token previews are gone with the buttons.
     assert 'data-preview=' not in html
     assert 'data-work-uri=' not in html
     assert "<th>Token formats</th>" not in html
@@ -91,7 +91,7 @@ def test_console_declares_the_working_list_context() -> None:
     html = client.get("/").text
 
     assert '<h3 class="subsection-heading">Country × doctype lists' in html
-    assert 'id="lst-select"' in html
+    assert "registryRows.onclick = chooseRow" in html
     assert 'id="ctx-scope"' in html
     # Pools are created from a green button that opens a form on demand.
     assert 'id="new-list-toggle" class="btn btn-sm btn-success"' in html
@@ -108,6 +108,9 @@ def test_console_declares_the_working_list_context() -> None:
     entries_panel = html[html.index('id="allocation-card"') : html.index('id="out"')]
     assert 'id="entries-count"' in entries_panel
     assert 'id="add-entries"' in entries_panel
+    # Country, doctype and URI are shared by every entry, so they sit above the table.
+    assert 'id="pool-uri"' in entries_panel
+    assert "<th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th>" in entries_panel
 
 
 def test_console_pages_are_not_cached() -> None:

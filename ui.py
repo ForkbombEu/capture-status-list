@@ -87,29 +87,6 @@ APP_CSS = """
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
     .batch-card { max-width: none; }
-    /* Console layout: a two-column dashboard inside the brand container —
-       forms and info on the left, results on the right, so every CTA
-       produces feedback the user can see without scrolling away. */
-    .console-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-      align-items: start;
-      gap: var(--space-6);
-    }
-    .console-right {
-      position: sticky;
-      top: calc(var(--topbar-height) + var(--space-4));
-      max-height: calc(100vh - var(--topbar-height) - 2 * var(--space-4));
-      overflow-y: auto;
-    }
-    @media (max-width: 1100px) {
-      .console-grid { grid-template-columns: 1fr; }
-      .console-right {
-        position: static;
-        max-height: none;
-        overflow-y: visible;
-      }
-    }
     .batch-fields {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -174,6 +151,14 @@ APP_CSS = """
       color: var(--fg-on-primary);
     }
     .btn-success:hover { background: var(--success-border); }
+    /* A disabled action keeps its label and turns muted: a revoked entry still
+       reads "Revoke", greyed out. */
+    .btn:disabled,
+    .btn:disabled:hover {
+      background: var(--bg-muted);
+      color: var(--fg-muted);
+      cursor: not-allowed;
+    }
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .btn-stack { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
     .btn-row .btn, .btn-stack .btn { justify-content: center; }
@@ -445,19 +430,15 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
-    /* The status-list card decodes one list at a time: the picker names the
-       legacy credential list and every allocated country × doctype pool. */
-    .list-picker { display: flex; align-items: center; gap: var(--space-3); }
-    #lst-select {
-      height: 36px;
-      max-width: 340px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
-      font: var(--fs-sm) var(--font-sans);
+    /* The registry is the chooser: clicking a row makes it the working list. */
+    .registry-row { cursor: pointer; }
+    .registry-row:hover td { background: var(--bg-muted); }
+    .registry-row[aria-current="true"] td {
+      background: var(--brand-secondary);
+      font-weight: 600;
     }
+    .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+    #pool-details dd { overflow-wrap: anywhere; }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -667,19 +648,16 @@ _CONSOLE_BODY = (
         " in JWT and CWT forms.",
     )
     + """
-    <div class="console-grid">
-      <div class="stack console-left">
+    <div class="stack">
       <section class="card" id="registry-card">
         <div class="panel-head">
           <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
-          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
+          <div class="btn-row">
+            <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
+            <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
+          </div>
         </div>
-        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Choose the list to operate on: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
-        <div class="list-picker mt-4">
-          <label class="field-label" for="lst-select">Operate on</label>
-          <select id="lst-select" aria-label="Status list to operate on"></select>
-          <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
-        </div>
+        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Click a list to operate on it: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
         <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
         <div id="new-list-form" class="mt-4" hidden>
           <div class="batch-fields">
@@ -770,16 +748,21 @@ _CONSOLE_BODY = (
 
       <section class="card" id="allocation-card" hidden>
         <div class="panel-head">
-          <h3 class="subsection-heading">Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
+          <h3 class="subsection-heading">Status list entries <span id="allocation-count" class="count-chip">0</span></h3>
         </div>
-        <p class="text-sm text-muted">Entries of the working list. They identify a country, doctype, list and index, but carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
+        <p class="text-sm text-muted">Entries of the working list. They carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
+        <dl class="dl mt-4" id="pool-details">
+          <dt>Country</dt><dd class="mono" id="pool-country"></dd>
+          <dt>Doctype</dt><dd class="mono" id="pool-doctype"></dd>
+          <dt>Status list URI</dt><dd class="mono" id="pool-uri"></dd>
+        </dl>
         <div class="batch-fields">
           <div>
             <label class="field-label" for="entries-count">Count</label>
             <input id="entries-count" type="number" min="1" max="500" value="10">
           </div>
           <div>
-            <label class="field-label" for="entries-expiry">List expiry</label>
+            <label class="field-label" for="entries-expiry">Entry expiry</label>
             <input id="entries-expiry" type="date" value="2099-12-31">
           </div>
         </div>
@@ -789,20 +772,17 @@ _CONSOLE_BODY = (
         <div class="credential-scroll">
           <div class="test-table-wrap">
             <table class="test-table">
-              <thead><tr><th>Country</th><th>Doctype</th><th>Index</th><th>Expiry</th><th>Status</th><th>Status list URI</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody id="allocation-rows"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      </div>
-
-      <aside class="stack console-right" aria-label="Results panel">
-        <section class="card">
-          <div class="panel-head"><h3 class="subsection-heading">Output</h3></div>
-          <pre class="output" id="out">Ready</pre>
-        </section>
+      <section class="card">
+        <div class="panel-head"><h3 class="subsection-heading">Output</h3></div>
+        <pre class="output" id="out">Ready</pre>
+      </section>
 
       <section class="card" id="token-card" hidden>
         <div class="panel-head">
@@ -882,7 +862,6 @@ _CONSOLE_BODY = (
         <pre id="jwks"></pre>
       </section>
 
-      </aside>
     </div>
     </div>
     </section>
@@ -1084,31 +1063,31 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     function renderAllocations() {
-      // The table is the working list's own inventory: a legacy context has no
+      // The panel is the working list's own inventory: a legacy context has no
       // allocated entries, a pool context shows exactly that pool's entries.
+      // Country, doctype and URI are the pool's own, so they sit above the table.
+      const pool = workingPool();
+      document.querySelector("#pool-country").textContent = pool ? pool.country : "";
+      document.querySelector("#pool-doctype").textContent = pool ? pool.doctype : "";
+      document.querySelector("#pool-uri").textContent = pool ? pool.status_list_uri : "";
       const entries = activeListUri
         ? allocations.filter((item) => item.status_list_uri === activeListUri)
         : [];
       allocationCount.textContent = entries.length;
       allocationRows.innerHTML = entries.length
         ? entries.map((item) => {
-            const status = escapeHtml(item.status);
+            const state = escapeHtml(item.status.toLowerCase());
             const revoked = item.status === "REVOKED";
-            return `<tr class="${escapeHtml(item.status.toLowerCase())}">
-              <td class="cell-mono">${escapeHtml(item.country)}</td>
-              <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            return `<tr class="${state}">
               <td class="cell-mono">${item.idx}</td>
               <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
-              <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${status}</span></td>
-              <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
+              <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
               <td>
-                <div class="btn-row">
-                  <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke ${escapeHtml(item.country)} ${escapeHtml(item.doctype)} entry ${item.idx}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button>
-                </div>
+                <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke entry ${item.idx}" ${revoked ? "disabled" : ""}>Revoke</button>
               </td>
             </tr>`;
           }).join("")
-        : `<tr class="empty-row"><td colspan="7">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="4">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
       allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
         button.onclick = () => guard(async () => {
           const data = await jsonFetch("/dashboard/allocated-entries/revoke", {
@@ -1125,13 +1104,21 @@ _CONSOLE_SCRIPT = """<script>
       });
     }
 
-    // The registry renders the list summaries: inventory only, the picker chooses.
-
+    // The registry is both the inventory and the chooser: clicking a row makes
+    // that list the working list. The legacy /status/1 credential list comes first.
     function renderRegistry(summaries) {
       registryCount.textContent = summaries.length;
-      // Pure inventory: the picker above chooses the list to operate on.
-      registryRows.innerHTML = summaries.length
-        ? summaries.map((item) => `<tr>
+      const legacyRevoked = credentials.filter((item) => item.status === "REVOKED").length;
+      const rowAttributes = (value) =>
+        `class="registry-row" tabindex="0" data-list="${escapeHtml(value)}"` +
+        (contextChosen && value === (activeListUri || "legacy") ? ' aria-current="true"' : "");
+      registryRows.innerHTML = `<tr ${rowAttributes("legacy")}>
+            <td colspan="2">Legacy credential list</td>
+            <td class="cell-mono">/status/1</td>
+            <td>${credentials.length}</td><td>${legacyRevoked}</td>
+            <td class="cell-mono">—</td><td>—</td>
+          </tr>` + (summaries.length
+        ? summaries.map((item) => `<tr ${rowAttributes(item.status_list_uri)}>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
             <td class="cell-mono">${escapeHtml(item.doctype)}</td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
@@ -1139,7 +1126,7 @@ _CONSOLE_SCRIPT = """<script>
             <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
             <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
           </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`);
     }
 
     async function load() {
@@ -1155,8 +1142,6 @@ _CONSOLE_SCRIPT = """<script>
           .filter((item) => item.verification_result)
           .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
       );
-      renderRegistry(registry);
-      renderListOptions(registry);
       if (
         contextChosen &&
         activeListUri &&
@@ -1165,7 +1150,6 @@ _CONSOLE_SCRIPT = """<script>
         clearList();           // the pool is gone: state was reset or the server reloaded
         return;
       }
-      listSelect.value = contextChosen ? activeListUri || "legacy" : "none";
       renderPanels();
       renderContext();
       render();
@@ -1277,25 +1261,12 @@ _CONSOLE_SCRIPT = """<script>
     const allocationCard = document.querySelector("#allocation-card");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
-    const listSelect = document.querySelector("#lst-select");
     let currentToken = "";
 
     // The working list the whole console is scoped to. Nothing is selected
     // until the operator picks one; null then means the legacy /status/1 list.
     let activeListUri = null;
     let contextChosen = false;
-
-    // Option labels carry the revoked count: the operator sees at a glance
-    // which of the registered lists the revocation landed in.
-    function renderListOptions(summaries) {
-      listSelect.innerHTML = [
-        '<option value="none">Pick a status list…</option>',
-        '<option value="legacy">Legacy /status/1 · credential list</option>',
-        ...summaries.map((item) => `<option value="${escapeHtml(item.status_list_uri)}">` +
-          `${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ` +
-          `${escapeHtml(item.list_id.slice(0, 8))} · ${item.revoked} revoked</option>`),
-      ].join("");
-    }
 
     function statusListUrl(uri, offset, limit) {
       const params = new URLSearchParams({
@@ -1335,12 +1306,13 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     function renderContext() {
-      const pool = registry.find((item) => item.status_list_uri === activeListUri);
+      const pool = workingPool();
       document.querySelector("#ctx-scope").textContent = !contextChosen
-        ? "No list selected yet: choose one above to operate on it."
+        ? "No list selected yet: click a list to operate on it."
         : activeListUri
           ? `Working on ${activeListUri} — ${pool.allocated} allocated, ${pool.revoked} revoked, ${pool.expired ? "expired" : "active"}.`
           : "Working on the legacy /status/1 credential list.";
+      renderRegistry(registry);
       renderAllocations();
     }
 
@@ -1348,7 +1320,6 @@ _CONSOLE_SCRIPT = """<script>
     async function selectList(uri) {
       contextChosen = true;
       activeListUri = uri;
-      listSelect.value = uri || "legacy";
       renderPanels();
       renderContext();
       await showCard(uri);
@@ -1357,17 +1328,27 @@ _CONSOLE_SCRIPT = """<script>
     function clearList() {
       contextChosen = false;
       activeListUri = null;
-      listSelect.value = "none";
       tokenCard.hidden = true;
       renderPanels();
       renderContext();
     }
 
-    listSelect.onchange = () => guard(async () => {
-      const value = listSelect.value;
-      if (!value || value === "none") return clearList();
-      await selectList(value === "legacy" ? null : value);
-    });
+    function chooseRow(event) {
+      const row = event.target.closest("tr[data-list]");
+      if (!row) return;
+      const value = row.dataset.list;
+      guard(async () => {
+        await selectList(value === "legacy" ? null : value);
+        // Re-rendering the registry drops focus; keyboard users keep their row.
+        if (event.type === "keydown") registryRows.querySelector('tr[aria-current="true"]')?.focus();
+      });
+    }
+    registryRows.onclick = chooseRow;
+    registryRows.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      chooseRow(event);
+    };
 
     function renderJwt(token) {
       const [header, payload, signature] = token.split(".");

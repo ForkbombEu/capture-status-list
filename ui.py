@@ -471,9 +471,8 @@ APP_CSS = """
       font-weight: 600;
     }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-    /* Signing key tab: one block per x5c certificate, long DNs wrap. */
-    #x5c dd { overflow-wrap: anywhere; }
-    .x5c-certificate + .x5c-certificate { margin-top: var(--space-6); }
+    /* The JWKS wraps so the key's long x5c certificate stays readable. */
+    #jwks { white-space: pre-wrap; overflow-wrap: anywhere; }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -819,8 +818,6 @@ _CONSOLE_BODY = (
         <div role="tabpanel" id="key-panel" aria-labelledby="tab-key" hidden>
           <p class="eyebrow">JWKS · list signer key</p>
           <pre id="jwks"></pre>
-          <h4 class="subsection-heading subhead">x5c certificate chain</h4>
-          <div id="x5c"></div>
         </div>
       </section>
 
@@ -1202,31 +1199,6 @@ _CONSOLE_SCRIPT = """<script>
         `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
     }
 
-    // Dates read DD/MM/YYYY (DESIGN.md §15); certificate times add the UTC clock.
-    function formatUtc(iso) {
-      const at = new Date(iso);
-      const pad = (value) => String(value).padStart(2, "0");
-      return `${pad(at.getUTCDate())}/${pad(at.getUTCMonth() + 1)}/${at.getUTCFullYear()} ` +
-        `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())} UTC`;
-    }
-
-    function renderCertificates(certificates) {
-      document.querySelector("#x5c").innerHTML = certificates.length
-        ? certificates.map((certificate, index) => `<div class="x5c-certificate">
-            <p class="eyebrow">Certificate ${index + 1} of ${certificates.length}${index === 0 ? " · signer" : ""}</p>
-            <dl class="dl mb-4">
-              <dt>Subject</dt><dd class="mono">${escapeHtml(certificate.subject)}</dd>
-              <dt>Issuer</dt><dd class="mono">${escapeHtml(certificate.issuer)}</dd>
-              <dt>Serial number</dt><dd class="mono">${escapeHtml(certificate.serial_number)}</dd>
-              <dt>Valid from</dt><dd>${formatUtc(certificate.not_before)}</dd>
-              <dt>Valid until</dt><dd>${formatUtc(certificate.not_after)}</dd>
-              <dt>SHA-256 fingerprint</dt><dd class="mono">${escapeHtml(certificate.sha256)}</dd>
-            </dl>
-            <pre>${escapeHtml(certificate.pem)}</pre>
-          </div>`).join("")
-        : '<p class="text-sm text-muted">This token carries no x5c header.</p>';
-    }
-
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
@@ -1236,7 +1208,6 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
-      renderCertificates(data.x5c);
       document.querySelector("#lst-bits").textContent = data.bits;
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;

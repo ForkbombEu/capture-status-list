@@ -1,5 +1,3 @@
-import base64
-import hashlib
 import json
 import os
 import subprocess
@@ -383,17 +381,14 @@ def test_debug_status_list_decodes_the_allocated_list_with_uri() -> None:
     assert decoded["jwks"]["keys"][0]["kid"] == decoded["header"]["kid"]
 
 
-def test_debug_status_list_decodes_the_x5c_signer_certificate(monkeypatch) -> None:
+def test_debug_jwks_carries_the_signer_certificate_in_x5c(monkeypatch) -> None:
     monkeypatch.delenv("EUDI_KEY_DIR", raising=False)
     uri = take()["status_list"]["uri"]
 
     decoded = client.get("/debug/status-list", params={"uri": uri}).json()
 
-    der = base64.b64decode(decoded["header"]["x5c"][0])
-    [certificate] = decoded["x5c"]
-    assert certificate["sha256"] == hashlib.sha256(der).digest().hex(":").upper()
-    assert certificate["pem"].startswith("-----BEGIN CERTIFICATE-----")
-    assert certificate["not_before"] < certificate["not_after"]
+    [key] = decoded["jwks"]["keys"]
+    assert key["x5c"] == decoded["header"]["x5c"]
 
 
 def test_debug_status_list_without_uri_still_decodes_the_legacy_list() -> None:
@@ -408,7 +403,6 @@ def test_debug_status_list_without_uri_still_decodes_the_legacy_list() -> None:
     assert decoded["payload"]["sub"] == decoded["list_uri"]
     assert decoded["revoked_indices"] == [created["idx"]]
     assert {item["credential_id"] for item in decoded["assignments"]} == {"cred-001"}
-    assert decoded["x5c"] == []
 
 
 def test_debug_status_list_rejects_unknown_and_identifier_lists() -> None:

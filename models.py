@@ -161,18 +161,6 @@ class StatusListBits(BaseModel):
     full: str
 
 
-class X5cCertificate(BaseModel):
-    """One certificate of a token's `x5c` chain, decoded for reading."""
-
-    subject: str
-    issuer: str
-    serial_number: str
-    not_before: str
-    not_after: str
-    sha256: str
-    pem: str
-
-
 class StatusListDebugResponse(BaseModel):
     warning: str = "TEST/DEBUG ONLY"
     list_uri: str
@@ -189,8 +177,7 @@ class StatusListDebugResponse(BaseModel):
     assignment_offset: int = 0
     assignment_limit: int = 100
     assignment_total: int = 0
-    jwks: dict[str, list[dict[str, str]]]
-    x5c: list[X5cCertificate] = []
+    jwks: dict[str, list[dict[str, str | list[str]]]]
 
 
 class StatusListExploreRequest(BaseModel):

@@ -112,8 +112,6 @@ def test_token_tab_sets_the_encoded_jwt_beside_its_decoded_parts() -> None:
     assert '<a class="text-sm mono" id="lst-uri" target="_blank" rel="noreferrer">' in token_panel
     columns = token_panel[token_panel.index('class="jwt-columns"') :]
     assert columns.index('id="jwt"') < columns.index('id="jwt-header"') < columns.index('id="jwt-payload"')
-    # The signing-key tab renders the decoded x5c chain next to the JWKS.
-    assert 'id="x5c"' in html[html.index('id="key-panel"') :]
 
 
 def test_console_pages_are_not_cached() -> None:

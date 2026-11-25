@@ -1,4 +1,3 @@
-import base64
 import os
 import time
 import zlib
@@ -10,8 +9,6 @@ from uuid import uuid4
 
 
 import jwt
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
@@ -72,7 +69,6 @@ from models import (
     RevokeResponse,
     VerifyBatchResponse,
     VerifyResponse,
-    X5cCertificate,
 )
 from status_list import (
     STATUS_INVALID,
@@ -678,7 +674,6 @@ def _legacy_status_list_debug(
         assignment_limit=assignment_limit,
         assignment_total=assignment_total,
         jwks=public_jwks(),
-        x5c=_x5c_certificates(header),
     )
 
 
@@ -726,27 +721,7 @@ def _allocated_status_list_debug(uri: str, assignment_limit: int) -> StatusListD
         assignments=[],
         assignment_limit=assignment_limit,
         jwks=eudi_public_jwks(state.country),
-        x5c=_x5c_certificates(header),
     )
-
-
-def _x5c_certificates(header: dict) -> list[X5cCertificate]:
-    """Decode the token header's `x5c` chain; the legacy token carries none."""
-    certificates = []
-    for encoded in header.get("x5c", []):
-        certificate = x509.load_der_x509_certificate(base64.b64decode(encoded))
-        certificates.append(
-            X5cCertificate(
-                subject=certificate.subject.rfc4514_string(),
-                issuer=certificate.issuer.rfc4514_string(),
-                serial_number=format(certificate.serial_number, "X"),
-                not_before=certificate.not_valid_before_utc.isoformat(),
-                not_after=certificate.not_valid_after_utc.isoformat(),
-                sha256=certificate.fingerprint(hashes.SHA256()).hex(":").upper(),
-                pem=certificate.public_bytes(serialization.Encoding.PEM).decode("ascii"),
-            )
-        )
-    return certificates
 
 
 @app.post("/debug/status-list/explore", response_model=StatusListExploreResponse)

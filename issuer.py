@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 import time
@@ -296,11 +297,12 @@ def public_jwks() -> dict[str, list[dict[str, str]]]:
     return key_store.jwks()
 
 
-def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str]]]:
+def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str | list[str]]]]:
     """Public JWKS for the key that signs one country's status lists.
 
     Mirrors `build_eudi_token`: operator material when configured, otherwise
-    the local test key.
+    the local test key. With a certificate, the key carries it in `x5c`
+    (RFC 7517 §4.7), the same chain the token header advertises.
     """
     material = material_for(country)
     try:
@@ -322,6 +324,7 @@ def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str]]]:
                 "alg": "ES256",
                 "x": _base64url_uint(numbers.x, 32),
                 "y": _base64url_uint(numbers.y, 32),
+                "x5c": [base64.b64encode(certificate_der).decode("ascii")],
             }
         ]
     }

@@ -316,11 +316,10 @@ curl http://localhost:8000/token_status_list/aggregation
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
 the console, and `GET /debug/status-list` decodes one of them:
 `?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
-out decodes the legacy `/status/1` list. The response also carries the token
-header's `x5c` chain decoded (subject, issuer, serial number, validity, SHA-256
-fingerprint, PEM). The console decodes the chosen list with it, so a revocation
-made through the API shows up in the decoded status list, not only in the
-entries table.
+out decodes the legacy `/status/1` list. Its `jwks` carries the signer
+certificate in each key's `x5c` (RFC 7517 §4.7) whenever the token header does.
+The console decodes the chosen list with it, so a revocation made through the
+API shows up in the decoded status list, not only in the entries table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
 endpoint, and starts or tops up pools through a second one:
@@ -349,7 +348,7 @@ pool at a time:
   three tabs: `Entries` (`Add entries to this list` plus every allocated entry,
   each with its own `Revoke`), `Token` (the list URI as a link, the encoded JWT
   beside its decoded header and payload, then the inflated `lst`), and
-  `Signing key` (the JWKS and the decoded `x5c` chain).
+  `Signing key` (the JWKS, whose key carries the signer certificate in `x5c`).
 
 A pool that disappears (state reset, server restart) drops back to the
 unselected view. Failures show in one dismissible alert.

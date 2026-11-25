@@ -44,7 +44,7 @@ def test_console_is_served_at_the_root() -> None:
 def test_console_renders_results_panel_before_the_token() -> None:
     html = client.get("/").text
 
-    assert '<main class="page-content">\n    <div class="container">' in html
+    assert '<section class="page-section" aria-labelledby="console-title">\n    <div class="container">' in html
     # The console shares the brand max-width so it lines up with the header.
     assert "console-container" not in html
     assert 'class="console-grid"' in html
@@ -54,14 +54,14 @@ def test_console_renders_results_panel_before_the_token() -> None:
     assert html.index('id="out"') < html.index('id="token-card"')
 
 
-def test_page_content_keeps_the_container_side_gutter() -> None:
-    # .page-content resets horizontal padding, so it must not share an element
-    # with .container: the gutter lives on a nested .container instead.
+def test_page_sections_keep_the_container_side_gutter() -> None:
+    # .page-section carries no horizontal padding, so it must not share an
+    # element with .container: the gutter lives on a nested .container instead.
     for path in ("/", "/docs"):
         html = client.get(path).text
-        assert 'class="page-content"' in html
-        assert "container page-content" not in html
-        assert "page-content container" not in html
+        assert 'class="page-section"' in html
+        assert "container page-section" not in html
+        assert "page-section container" not in html
 
 
 def test_page_bands_share_one_fixed_gutter() -> None:
@@ -97,7 +97,7 @@ def test_registry_inventory_carries_no_row_actions() -> None:
 def test_console_declares_the_working_list_context() -> None:
     html = client.get("/").text
 
-    assert "<h2>Country × doctype lists" in html
+    assert '<h3 class="subsection-heading">Country × doctype lists' in html
     assert 'id="lst-select"' in html
     assert 'id="ctx-scope"' in html
     # Pools are created from a green button that opens a form on demand.

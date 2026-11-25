@@ -260,14 +260,13 @@ APP_CSS = """
     .legend-payload { background: var(--brand-accent-vivid); }
     .legend-signature { background: var(--credential); }
 
+    /* A group heading inside a panel or section (the brand .subsection-heading),
+       set off by a hairline. No trailing colon (DESIGN.md §15). */
     .subhead {
       margin: var(--space-6) 0 var(--space-3);
       padding-bottom: var(--space-2);
       border-bottom: 1px solid var(--border);
-      font: 700 var(--fs-xl)/var(--lh-xl) var(--font-sans);
-      letter-spacing: -0.005em;
     }
-    .subhead::after { content: ':'; }
     .decoded-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -637,22 +636,54 @@ def page(
 </html>"""
 
 
-_CONSOLE_BODY = """  <header class="hero">
+def _section_intro(level: int, title_id: str, title: str, description: str = "") -> str:
+    """A section intro (DESIGN.md §8): the title row, then an optional description."""
+    paragraph = (
+        f"""
+      <div class="section-intro-description"><p>{description}</p></div>"""
+        if description
+        else ""
+    )
+    return f"""    <header class="section-intro">
+      <div class="section-intro-heading">
+        <h{level} class="section-intro-title" id="{title_id}">{title}</h{level}>
+      </div>{paragraph}
+    </header>"""
+
+
+def _hero_band(title: str, description: str) -> str:
+    """The indigo band every page opens with (DESIGN.md §8), titled `#page-title`."""
+    return f"""  <section class="hero-band" aria-labelledby="page-title">
     <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>Token status list console</h1>
-        <p>Create test credentials, revoke selected entries, and verify them against the
-        signed Status List Token. The registry debugger below exposes paired country × doctype
-        Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
+{_section_intro(1, "page-title", title, description)}
     </div>
-  </header>
-  <main class="page-content">
+  </section>"""
+
+
+_CONSOLE_BODY = (
+    _hero_band(
+        "Token status list console",
+        "Create test credentials, revoke selected entries, and verify them against the"
+        " signed Status List Token.",
+    )
+    + """
+  <main>
+    <section class="page-section" aria-labelledby="console-title">
     <div class="container">
+"""
+    + _section_intro(
+        2,
+        "console-title",
+        "Registry debugger",
+        "Paired country × doctype Token Status Lists and ISO 18013-5 identifier lists,"
+        " in JWT and CWT forms.",
+    )
+    + """
     <div class="console-grid">
       <div class="stack console-left">
       <section class="card" id="registry-card">
-        <div class="section-header">
-          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
+        <div class="panel-head">
+          <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
           <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
         </div>
         <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Choose the list to operate on: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
@@ -691,8 +722,8 @@ _CONSOLE_BODY = """  <header class="hero">
       </section>
 
       <section class="card batch-card" id="legacy-card" hidden>
-        <div class="section-header">
-          <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
+        <div class="panel-head">
+          <h3 class="subsection-heading">Credentials <span id="row-count" class="count-chip">0</span></h3>
           <div class="btn-row">
             <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
             <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
@@ -750,8 +781,8 @@ _CONSOLE_BODY = """  <header class="hero">
       </section>
 
       <section class="card" id="allocation-card" hidden>
-        <div class="section-header">
-          <h2>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h2>
+        <div class="panel-head">
+          <h3 class="subsection-heading">Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h3>
         </div>
         <p class="text-sm text-muted">Entries of the working list. They identify a country, doctype, list and index, but carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
         <div class="batch-fields">
@@ -781,13 +812,13 @@ _CONSOLE_BODY = """  <header class="hero">
 
       <aside class="stack console-right" aria-label="Results panel">
         <section class="card">
-          <div class="section-header"><h2>Output</h2></div>
+          <div class="panel-head"><h3 class="subsection-heading">Output</h3></div>
           <pre class="output" id="out">Ready</pre>
         </section>
 
       <section class="card" id="token-card" hidden>
-        <div class="section-header">
-          <h2>Status list token</h2>
+        <div class="panel-head">
+          <h3 class="subsection-heading">Status list token</h3>
           <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
         </div>
         <p class="text-sm text-muted" id="lst-scope"></p>
@@ -798,7 +829,7 @@ _CONSOLE_BODY = """  <header class="hero">
         </p>
         <pre class="output jwt" id="jwt"></pre>
 
-        <h3 class="subhead">Decoded token</h3>
+        <h4 class="subsection-heading subhead">Decoded token</h4>
         <div class="decoded-grid">
           <div>
             <p class="eyebrow">Header</p>
@@ -811,7 +842,7 @@ _CONSOLE_BODY = """  <header class="hero">
           </div>
         </div>
 
-        <h3 class="subhead">Status list</h3>
+        <h4 class="subsection-heading subhead">Status list</h4>
         <div class="metric-grid">
           <div class="card">
             <strong class="metric-value" id="lst-bits">0</strong>
@@ -858,7 +889,7 @@ _CONSOLE_BODY = """  <header class="hero">
         </div>
         <div class="btn-row mt-4" id="assignment-pagination"></div>
 
-        <h3 class="subhead">Signing key</h3>
+        <h4 class="subsection-heading subhead">Signing key</h4>
         <p class="eyebrow" id="jwks-label">JWKS · /.well-known/jwks.json</p>
         <pre id="jwks"></pre>
       </section>
@@ -866,7 +897,9 @@ _CONSOLE_BODY = """  <header class="hero">
       </aside>
     </div>
     </div>
+    </section>
   </main>"""
+)
 
 
 # Helpers shared by the console and the explorer: HTML escaping, the styled
@@ -1477,21 +1510,26 @@ def console_html() -> str:
     )
 
 
-_EXPLORER_BODY = """  <header class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>Status list explorer</h1>
-      <p>Paste a Token Status List from any issuer and inspect it: the decoded header and
-        payload, the inflated <span class="mono">lst</span>, every revoked index, and the status
-        of a single index. Accepts a JWT, a CWT as hex or base64, the JSON payload, or the
-        bare <span class="mono">lst</span> value. Signatures are not verified.</p>
-    </div>
-  </header>
-  <main class="page-content">
+_EXPLORER_BODY = (
+    _hero_band(
+        "Status list explorer",
+        "Paste a Token Status List from any issuer and inspect it: the decoded header and"
+        ' payload, the inflated <span class="mono">lst</span>, every revoked index, and the'
+        " status of a single index.",
+    )
+    + """
+  <main>
+    <section class="page-section" aria-labelledby="payload-title">
     <div class="container">
-    <div class="stack">
-      <section class="card">
-        <div class="section-header"><h2>Payload</h2></div>
+"""
+    + _section_intro(
+        2,
+        "payload-title",
+        "Payload",
+        'Accepts a JWT, a CWT as hex or base64, the JSON payload, or the bare <span class="mono">lst</span>'
+        " value. Signatures are not verified.",
+    )
+    + """
         <label class="field-label" for="explore-payload">Status list JWT, CWT, JSON payload or lst</label>
         <textarea id="explore-payload" class="payload-input" spellcheck="false"
           placeholder="eyJhbGciOiJFUzI1NiIs… · d28450a3… · {&quot;bits&quot;:1,&quot;lst&quot;:&quot;eNrb…&quot;} · eNrb…"></textarea>
@@ -1515,10 +1553,14 @@ _EXPLORER_BODY = """  <header class="hero">
           <button id="explore-current" class="btn btn-md btn-outline">Load this server's status list</button>
         </div>
         <pre class="output mt-4" id="explore-out">Paste a payload, then inspect it.</pre>
-      </section>
+    </div>
+    </section>
 
-      <section class="card" id="explore-card" hidden>
-        <div class="section-header"><h2>Decoded status list</h2></div>
+    <section class="page-section page-section-white" id="explore-card" aria-labelledby="decoded-title" hidden>
+    <div class="container">
+"""
+    + _section_intro(2, "decoded-title", "Decoded status list")
+    + """
         <div class="metric-grid">
           <div class="card">
             <strong class="metric-value" id="explore-format">—</strong>
@@ -1539,20 +1581,20 @@ _EXPLORER_BODY = """  <header class="hero">
         </div>
         <p class="lst-note" id="explore-note"></p>
 
-        <h3 class="subhead">Check an index</h3>
+        <h3 class="subsection-heading subhead">Check an index</h3>
         <div class="index-lookup">
           <input id="explore-index" type="number" min="0" value="0" aria-label="Index">
           <button id="explore-lookup" class="btn btn-sm btn-secondary">Check index</button>
           <span id="explore-index-status"></span>
         </div>
 
-        <h3 class="subhead">Non-valid indices</h3>
+        <h3 class="subsection-heading subhead">Non-valid indices</h3>
         <div id="explore-indices" class="index-groups"></div>
         <div class="btn-row mt-4">
           <button id="explore-copy-indices" class="btn btn-sm btn-outline">Copy the indices</button>
         </div>
 
-        <h3 class="subhead">Inflated lst spectrum</h3>
+        <h3 class="subsection-heading subhead">Inflated lst spectrum</h3>
         <div class="bitmap-shell">
           <div class="bitmap-scroll" id="explore-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
             <div class="bitmap" id="explore-bitmap"></div>
@@ -1563,7 +1605,7 @@ _EXPLORER_BODY = """  <header class="hero">
         </div>
         <p class="bitmap-caption" id="explore-caption"></p>
 
-        <h3 class="subhead">Decoded token</h3>
+        <h3 class="subsection-heading subhead">Decoded token</h3>
         <div class="decoded-grid">
           <div>
             <p class="eyebrow">Header</p>
@@ -1574,10 +1616,10 @@ _EXPLORER_BODY = """  <header class="hero">
             <pre id="explore-payload-json"></pre>
           </div>
         </div>
-      </section>
     </div>
-    </div>
+    </section>
   </main>"""
+)
 
 
 _EXPLORER_SCRIPT = """<script>
@@ -1735,19 +1777,25 @@ SWAGGER_JS = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.j
 
 def docs_html(openapi_url: str) -> str:
     """Swagger UI inside the same branded shell as the rest of the app."""
-    body = """  <header class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>API documentation</h1>
-      <p>Every endpoint of the mock Token Status List server, generated from the
-        OpenAPI document at <span class="mono">/openapi.json</span>.</p>
-    </div>
-  </header>
-  <main class="page-content">
+    body = (
+        _hero_band("API documentation", "Every endpoint of the mock Token Status List server.")
+        + """
+  <main>
+    <section class="page-section" aria-labelledby="endpoints-title">
     <div class="container">
+"""
+        + _section_intro(
+            2,
+            "endpoints-title",
+            "Endpoints",
+            'Generated from the OpenAPI document at <span class="mono">/openapi.json</span>.',
+        )
+        + """
       <div class="docs-frame"><div id="swagger-ui"></div></div>
     </div>
+    </section>
   </main>"""
+    )
     return page(
         title="API documentation · Credimi",
         active="API docs",

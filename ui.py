@@ -146,11 +146,53 @@ APP_CSS = """
       color: var(--brand-primary);
     }
     .btn-secondary:hover { background: var(--brand-secondary-strong); }
-    .btn-success {
-      background: var(--success);
-      color: var(--fg-on-primary);
+    /* Action feedback: one alert (DESIGN.md §11) floating like a toast in the
+       bottom-right corner until dismissed; successful actions show their result
+       in the panels. Solid white rather than 60%, since it floats over content. */
+    .notice {
+      position: fixed;
+      right: var(--space-6);
+      bottom: var(--space-6);
+      z-index: 200;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: var(--space-3);
+      align-items: start;
+      width: min(440px, calc(100vw - 2 * var(--space-4)));
+      padding: 17px;
+      border: 1px solid currentColor;
+      border-radius: var(--radius-md);
+      background: var(--bg);
+      box-shadow: var(--shadow-lg);
+      animation: notice-in 220ms ease-out;
     }
-    .btn-success:hover { background: var(--success-border); }
+    .notice[hidden] { display: none; }
+    .notice-destructive { color: var(--destructive); }
+    .notice-info { color: var(--brand-primary); }
+    .notice-icon {
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .notice-destructive .notice-icon-info,
+    .notice-info .notice-icon-destructive { display: none; }
+    .notice-title { font: 500 var(--fs-md)/1.25 var(--font-sans); }
+    .notice-body {
+      margin-top: var(--space-1);
+      font-size: var(--fs-base);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 40vh;
+      overflow: auto;
+    }
+    .notice .btn-ghost { color: var(--fg); }
+    @keyframes notice-in { from { opacity: 0; transform: translateY(8px); } }
+    @media (prefers-reduced-motion: reduce) { .notice { animation: none; } }
     /* A disabled action keeps its label and turns muted: a revoked entry still
        reads "Revoke", greyed out. */
     .btn:disabled,
@@ -654,7 +696,7 @@ _CONSOLE_BODY = (
           <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
           <div class="btn-row">
             <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
-            <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
+            <button id="new-list-toggle" class="btn btn-sm btn-primary" aria-expanded="false" aria-controls="new-list-form">New status list</button>
           </div>
         </div>
         <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Click a list to operate on it: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
@@ -675,7 +717,7 @@ _CONSOLE_BODY = (
             </div>
           </div>
           <div class="btn-row mt-4">
-            <button id="new-list" class="btn btn-md btn-success">Create status list</button>
+            <button id="new-list" class="btn btn-md btn-primary">Create status list</button>
             <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
           </div>
         </div>
@@ -779,10 +821,15 @@ _CONSOLE_BODY = (
         </div>
       </section>
 
-      <section class="card">
-        <div class="panel-head"><h3 class="subsection-heading">Output</h3></div>
-        <pre class="output" id="out">Ready</pre>
-      </section>
+      <div id="notice" class="notice" role="alert" hidden>
+        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <div>
+          <p class="notice-title" id="notice-title"></p>
+          <p class="notice-body" id="notice-body"></p>
+        </div>
+        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+      </div>
 
       <section class="card" id="token-card" hidden>
         <div class="panel-head">
@@ -984,7 +1031,7 @@ _CONSOLE_SCRIPT = """<script>
     const registryCount = document.querySelector("#registry-count");
     const allocationRows = document.querySelector("#allocation-rows");
     const allocationCount = document.querySelector("#allocation-count");
-    const out = document.querySelector("#out");
+    const notice = document.querySelector("#notice");
     const rowCount = document.querySelector("#row-count");
     let credentials = [];
     let verification = {};
@@ -997,17 +1044,32 @@ _CONSOLE_SCRIPT = """<script>
         .filter(Boolean);
     }
 
-    function write(value) {
-      out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    function describe(value) {
+      if (typeof value === "string") return value;
+      if (value instanceof Error) return value.message;
+      if (value && typeof value.detail === "string") return value.detail;
+      return JSON.stringify(value, null, 2);
     }
 
-    // Every dashboard fetch reports failures in Output: an unhandled rejection
-    // would leave the operator with a stale table and no explanation.
+    // Failures and hints float in one alert until dismissed or until the next
+    // action starts; successful actions show their result in the panels.
+    function notify(value, kind = "destructive") {
+      notice.className = `notice notice-${kind}`;
+      document.querySelector("#notice-title").textContent =
+        kind === "info" ? "Nothing selected" : "The action failed";
+      document.querySelector("#notice-body").textContent = describe(value);
+      notice.hidden = false;
+    }
+    document.querySelector("#notice-dismiss").onclick = () => { notice.hidden = true; };
+
+    // Every dashboard fetch reports failures in the notice: an unhandled
+    // rejection would leave the operator with a stale table and no explanation.
     async function guard(action) {
+      notice.hidden = true;
       try {
         await action();
       } catch (error) {
-        write(error);
+        notify(error);
       }
     }
 
@@ -1090,14 +1152,13 @@ _CONSOLE_SCRIPT = """<script>
         : `<tr class="empty-row"><td colspan="4">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
       allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
         button.onclick = () => guard(async () => {
-          const data = await jsonFetch("/dashboard/allocated-entries/revoke", {
+          await jsonFetch("/dashboard/allocated-entries/revoke", {
             method: "POST",
             body: JSON.stringify({
               status_list_uri: button.dataset.allocationUri,
               idx: Number(button.dataset.allocationIdx),
             }),
           });
-          write(data);
           await load();
           await refreshCard();
         });
@@ -1158,7 +1219,7 @@ _CONSOLE_SCRIPT = """<script>
     // The credentials panel owns the credential batch: /status/1 credentials,
     // each one paired with an entry in the country × doctype pool of the form.
     document.querySelector("#create").onclick = () => guard(async () => {
-      const data = await jsonFetch("/credentials/random-batch", {
+      await jsonFetch("/credentials/random-batch", {
         method: "POST",
         body: JSON.stringify({
           count: Number(document.querySelector("#count").value || 10),
@@ -1168,7 +1229,6 @@ _CONSOLE_SCRIPT = """<script>
           expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
         }),
       });
-      write(data);
       await load();
       await refreshCard();
     });
@@ -1176,8 +1236,8 @@ _CONSOLE_SCRIPT = """<script>
     // The allocated-entry panel owns its pool's top-up: entries only.
     document.querySelector("#add-entries").onclick = () => guard(async () => {
       const pool = workingPool();
-      if (!pool) return write("Operate on an allocated pool first.");
-      const data = await jsonFetch("/dashboard/status-lists", {
+      if (!pool) return notify("Click a country × doctype list first.", "info");
+      await jsonFetch("/dashboard/status-lists", {
         method: "POST",
         body: JSON.stringify({
           country: pool.country,
@@ -1186,7 +1246,6 @@ _CONSOLE_SCRIPT = """<script>
           count: Number(document.querySelector("#entries-count").value || 10),
         }),
       });
-      write(data);
       await load();
       await refreshCard();
     });
@@ -1212,7 +1271,6 @@ _CONSOLE_SCRIPT = """<script>
           count: 1,
         }),
       });
-      write(data);
       showNewListForm(false);
       await load();
       await selectList(data.status_list_uri);
@@ -1220,19 +1278,18 @@ _CONSOLE_SCRIPT = """<script>
 
     document.querySelector("#revoke").onclick = () => guard(async () => {
       const ids = selectedIds();
-      if (!ids.length) return write("Select credentials first.");
-      const data = await jsonFetch("/credentials/revoke-batch", {
+      if (!ids.length) return notify("Select credentials first.", "info");
+      await jsonFetch("/credentials/revoke-batch", {
         method: "POST",
         body: JSON.stringify({ credential_ids: ids }),
       });
-      write(data);
       await load();
       await refreshCard();
     });
 
     document.querySelector("#verify").onclick = () => guard(async () => {
       const ids = selectedIds();
-      if (!ids.length) return write("Select credentials first.");
+      if (!ids.length) return notify("Select credentials first.", "info");
       const data = await jsonFetch("/verify-batch", {
         method: "POST",
         body: JSON.stringify({ credential_ids: ids }),
@@ -1240,7 +1297,6 @@ _CONSOLE_SCRIPT = """<script>
       for (const item of data.verified || []) {
         verification[item.credential_id] = { result: item.result, status: item.status };
       }
-      write(data);
       render();
       await refreshCard();
     });
@@ -1287,10 +1343,6 @@ _CONSOLE_SCRIPT = """<script>
     async function refreshCard() {
       if (!contextChosen || tokenCard.hidden) return;
       await showCard(activeListUri);
-    }
-
-    function contextLabel() {
-      return activeListUri || "the legacy /status/1 list";
     }
 
     // The registry stays on screen: it is both the inventory and the chooser.
@@ -1450,22 +1502,17 @@ _CONSOLE_SCRIPT = """<script>
     };
     document.querySelector("#token").onclick = () => guard(async () => {
       await showCard(activeListUri);
-      write(
-        `Status list token fetched for ${contextLabel()}. ` +
-        "The decoded token, status list and signing key are shown below the output.",
-      );
       tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
     document.querySelector("#reset").onclick = () => guard(async () => {
-      const data = await jsonFetch("/reset", { method: "POST" });
+      await jsonFetch("/reset", { method: "POST" });
       verification = {};
-      write(data);
       await load();          // every pool is gone: the context falls back
       await refreshCard();
     });
 
-    load().catch(write);
+    load().catch(notify);
   </script>"""
 
 

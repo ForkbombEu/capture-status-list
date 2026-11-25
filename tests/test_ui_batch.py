@@ -47,11 +47,12 @@ def test_console_stacks_its_panels_in_one_column() -> None:
     assert '<section class="page-section" aria-labelledby="console-title">\n    <div class="container">' in html
     # The console shares the brand max-width so it lines up with the header.
     assert "console-container" not in html
-    # Lists, then the working list's panel, then the output, then its token.
+    # Lists, then the working list's panel, then its token.
     assert html.index('id="registry-card"') < html.index('id="legacy-card"')
     assert html.index('id="legacy-card"') < html.index('id="allocation-card"')
-    assert html.index('id="allocation-card"') < html.index('id="out"')
-    assert html.index('id="out"') < html.index('id="token-card"')
+    assert html.index('id="allocation-card"') < html.index('id="token-card"')
+    # Failures float in one dismissible alert instead of an output panel.
+    assert 'id="notice" class="notice" role="alert" hidden' in html
 
 
 def test_page_sections_keep_the_container_side_gutter() -> None:
@@ -93,10 +94,10 @@ def test_console_declares_the_working_list_context() -> None:
     assert '<h3 class="subsection-heading">Country × doctype lists' in html
     assert "registryRows.onclick = chooseRow" in html
     assert 'id="ctx-scope"' in html
-    # Pools are created from a green button that opens a form on demand.
-    assert 'id="new-list-toggle" class="btn btn-sm btn-success"' in html
+    # Pools are created from the primary button that opens a form on demand.
+    assert 'id="new-list-toggle" class="btn btn-sm btn-primary"' in html
     assert 'id="new-list-form" class="mt-4" hidden' in html
-    assert 'id="new-list" class="btn btn-md btn-success"' in html
+    assert 'id="new-list" class="btn btn-md btn-primary"' in html
     # Panels are gated on the working list: the registry stays on screen, the
     # credential panel and the allocated-entry panel belong to one list each.
     assert 'id="legacy-card" hidden' in html
@@ -105,7 +106,7 @@ def test_console_declares_the_working_list_context() -> None:
     credentials_panel = html[html.index('id="legacy-card"') : html.index('id="allocation-card"')]
     assert 'id="count"' in credentials_panel
     assert 'id="create"' in credentials_panel
-    entries_panel = html[html.index('id="allocation-card"') : html.index('id="out"')]
+    entries_panel = html[html.index('id="allocation-card"') : html.index('id="token-card"')]
     assert 'id="entries-count"' in entries_panel
     assert 'id="add-entries"' in entries_panel
     # Country, doctype and URI are shared by every entry, so they sit above the table.

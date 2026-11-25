@@ -258,10 +258,31 @@ APP_CSS = """
       display: flex;
       flex-wrap: wrap;
       gap: var(--space-2);
-      margin-bottom: var(--space-3);
     }
     .jwt-legend .badge { background: var(--bg-muted); }
     .jwt-legend .badge-dot { width: 8px; height: 8px; }
+    /* The working list's URI, under the card title: an outline button whose
+       arrow-up-right says it opens the served token in a new tab. Long URIs
+       wrap instead of stretching the card. */
+    .list-uri {
+      height: auto;
+      min-height: 28px;
+      max-width: 100%;
+      margin-top: var(--space-3);
+      padding-block: var(--space-1);
+      overflow-wrap: anywhere;
+      text-align: left;
+    }
+    .list-uri svg {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .legend-header { background: var(--brand-primary); }
     .legend-payload { background: var(--brand-accent-vivid); }
     .legend-signature { background: var(--credential); }
@@ -726,6 +747,7 @@ _CONSOLE_BODY = (
           <div>
             <h3 class="subsection-heading" id="working-title"></h3>
             <p class="text-sm text-muted" id="working-meta"></p>
+            <a class="btn btn-sm btn-outline list-uri" id="lst-uri" target="_blank" rel="noreferrer"><span class="mono" id="lst-uri-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
           </div>
         </div>
         <div class="tabs" role="tablist" id="working-tabs" aria-label="Working list views">
@@ -759,19 +781,18 @@ _CONSOLE_BODY = (
         </div>
 
         <div role="tabpanel" id="token-panel" aria-labelledby="tab-token" hidden>
-          <div class="flex-between gap-3 mb-4">
-            <a class="text-sm mono" id="lst-uri" target="_blank" rel="noreferrer"></a>
-            <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
-          </div>
           <div class="jwt-columns">
             <div>
               <p class="eyebrow">Encoded</p>
-              <p class="jwt-legend">
-                <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
-                <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
-                <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
-              </p>
               <pre class="output jwt" id="jwt"></pre>
+              <div class="flex-between gap-3 mt-4">
+                <p class="jwt-legend">
+                  <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
+                  <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
+                  <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
+                </p>
+                <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
+              </div>
             </div>
             <div class="jwt-decoded">
               <p class="eyebrow">Decoded header</p>
@@ -1067,6 +1088,9 @@ _CONSOLE_SCRIPT = """<script>
         document.querySelector("#working-meta").textContent =
           `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
           (pool.expired ? "expired" : `expires ${pool.expires || "—"}`);
+        const link = document.querySelector("#lst-uri");
+        link.href = pool.status_list_uri;
+        document.querySelector("#lst-uri-text").textContent = pool.status_list_uri;
       }
       renderRegistry();
       renderAllocations();
@@ -1202,9 +1226,6 @@ _CONSOLE_SCRIPT = """<script>
     function renderDecodedToken(data) {
       currentToken = data.token;
       renderJwt(data.token);
-      const link = document.querySelector("#lst-uri");
-      link.href = data.list_uri;
-      link.textContent = data.list_uri;
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);

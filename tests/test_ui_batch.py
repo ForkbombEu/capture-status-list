@@ -107,11 +107,15 @@ def test_console_declares_the_working_list_context() -> None:
 def test_token_tab_sets_the_encoded_jwt_beside_its_decoded_parts() -> None:
     html = client.get("/").text
 
+    # The list URI sits above the tabs and opens the served token in a new tab.
+    uri_link = 'id="lst-uri" target="_blank" rel="noreferrer"'
+    assert html.index(uri_link) < html.index('id="working-tabs"')
     token_panel = html[html.index('id="token-panel"') : html.index('id="key-panel"')]
-    # The list URI opens the served token in a new tab.
-    assert '<a class="text-sm mono" id="lst-uri" target="_blank" rel="noreferrer">' in token_panel
+    assert 'id="lst-uri"' not in token_panel
     columns = token_panel[token_panel.index('class="jwt-columns"') :]
     assert columns.index('id="jwt"') < columns.index('id="jwt-header"') < columns.index('id="jwt-payload"')
+    # Encoded and decoded start level: the colour legend sits under the JWT.
+    assert columns.index('id="jwt"') < columns.index('class="jwt-legend"')
 
 
 def test_console_pages_are_not_cached() -> None:

@@ -83,11 +83,10 @@ def test_console_declares_the_working_list_context() -> None:
     html = client.get("/").text
 
     assert "registryRows.onclick = chooseRow" in html
-    # The list table stands on the page with no card, on a white surface so its
-    # rows stay readable over the lavender wash; its actions sit beneath it, and
-    # pools are created from the primary button that opens a form.
+    # The list table stands on the page with no card (the brand table gives it
+    # its white surface); its actions sit beneath it, and pools are created from
+    # the primary button that opens a form.
     registry = html[html.index('id="registry"') : html.index('id="working-card"')]
-    assert '<div class="test-table-wrap table-surface">' in registry
     assert registry.index('id="registry-rows"') < registry.index('id="registry-refresh"')
     assert 'id="new-list-toggle" class="btn btn-lg btn-primary"' in registry
     assert 'id="new-list-form" class="mt-4" hidden' in registry

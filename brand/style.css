@@ -60,7 +60,7 @@
 
   /* ---------- Color: borders / rings ---------- */
   --border:                  #E4E4E7;   /* input/card hairline */
-  --border-strong:           #9A97B5;   /* table cell divider, rule */
+  --border-strong:           #9A97B5;   /* rules, outlines, hover borders */
   --border-soft:             #C5C5CC;   /* section frame */
   --input:                   var(--border);
   --ring:                    var(--brand-accent);
@@ -1620,9 +1620,12 @@ body.role-active .tree-leaf.role-highlight a {
   pointer-events: none;
 }
 
-/* Test coverage page */
+/* Data tables (DESIGN.md §11 Tables): the Scoreboard pattern — a white surface
+   on the lavender wash, a lavender header band, hairline rows. */
 .test-table-wrap {
   overflow-x: auto;
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
 .test-table {
@@ -1633,25 +1636,27 @@ body.role-active .tree-leaf.role-highlight a {
 
 .test-table th {
   text-align: left;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 2px solid var(--border);
+  height: 40px;
+  padding: 0 var(--space-3);
   font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--fg-muted);
+  font-weight: 500;
+  color: var(--brand-primary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.14em;
   white-space: nowrap;
-  background: var(--bg);
+  background: var(--brand-secondary-strong);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .test-table td {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
+
+.test-table tbody tr:last-child td { border-bottom: 0; }
 
 .test-table tr:hover td { background: var(--bg-muted); }
 

@@ -248,7 +248,7 @@ popovers, inputs. _Never_ put content directly on a pure-white page background
 --fg-muted:     #9A97B5;   /* secondary text, rules */
 --fg-subtle:    #606083;   /* caption text */
 --border:       #E4E4E7;   /* input/card hairline */
---border-strong:#9A97B5;   /* table cell divider */
+--border-strong:#9A97B5;   /* rules, outlines, hover borders */
 --fg-on-primary:#FAFAFA;
 --card:         #FFFFFF;
 --popover:      #FFFFFF;
@@ -533,7 +533,6 @@ migrate ([§17](#17-page-layout-update)).
 | Dashboard | 2 columns | 16px |
 | Marketplace | 3 columns | 16px |
 | Hub / catalogue | 4 columns | 14px |
-| Scoreboard list | 1 column (full-width cards) | 18px |
 | Link cards | 3 columns (1 on mobile) | 20px |
 
 ### Fold motif
@@ -676,6 +675,30 @@ On hover: border darkens to `--border-strong`. No `transform` lift.
 
 The one exception is a **link card**, a whole card that opens a document:
 see below.
+
+### Tables
+
+Data tables follow the Scoreboard (`credimi.io/scoreboard`); `.test-table`
+inside a `.test-table-wrap` renders them.
+
+- A white surface (`--bg`, 6px `--radius`) on the lavender wash, with no border
+  and no shadow.
+- A 40px header band in `--brand-secondary-strong`. Its labels are uppercase
+  labels ([§6](#6-typography)): `--fs-xs`, weight 500, +0.14em, in
+  `--brand-primary`.
+- Rows divided by a 1px `--border` hairline, cells top-aligned with 12px of
+  padding; a hovered row turns `--bg-muted`.
+- The first cell names the row and may add a second line with its status chip
+  and counts, in the order of a test result row ([§12](#12-patterns)).
+
+```html
+<div class="test-table-wrap">
+  <table class="test-table">
+    <thead><tr><th>Pipeline</th><th>Last run</th></tr></thead>
+    <tbody>…</tbody>
+  </table>
+</div>
+```
 
 ### Inputs
 

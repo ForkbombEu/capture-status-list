@@ -141,28 +141,8 @@ APP_CSS = """
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
 
-    /* Tables follow the Credimi scoreboard (credimi.io/scoreboard): a white 6px
-       surface on the lavender wash, a lavender header band with small uppercase
-       indigo labels, and hairline rows. */
-    .table-surface {
-      overflow: auto;
-      border-radius: var(--radius);
-      background: var(--bg);
-    }
-    .table-surface .test-table th {
-      height: 40px;
-      padding: 0 var(--space-3);
-      border-bottom: 0;
-      background: var(--brand-secondary-strong);
-      color: var(--brand-primary);
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-    }
-    .table-surface .test-table td { padding: var(--space-3); }
-    .table-surface .test-table tbody tr:last-child td { border-bottom: 0; }
-    /* The scoreboard's two-line first cell: the list's name, then its state
-       pill and counts. */
+    /* Tables are the brand's Scoreboard pattern (`.test-table`, DESIGN.md §11
+       Tables); the console only adds the registry's two-line first cell. */
     .list-name {
       display: block;
       color: var(--brand-primary);
@@ -179,7 +159,7 @@ APP_CSS = """
       font-size: var(--fs-xs);
     }
     .list-meta .status-chip { height: 20px; padding: 0 var(--space-2); }
-    .entries-scroll { max-height: 420px; }
+    .entries-scroll { max-height: 420px; overflow: auto; border-radius: var(--radius); }
     .entries-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
@@ -766,7 +746,7 @@ _CONSOLE_BODY = (
     + """
     <div class="stack">
       <div id="registry">
-        <div class="test-table-wrap table-surface">
+        <div class="test-table-wrap">
           <table class="test-table">
             <thead><tr><th>List</th><th>List UUID</th><th>Expiry</th></tr></thead>
             <tbody id="registry-rows"></tbody>
@@ -802,7 +782,7 @@ _CONSOLE_BODY = (
         <div class="panel-head">
           <div>
             <h3 class="subsection-heading" id="working-title"></h3>
-            <p class="text-sm text-muted" id="working-meta"></p>
+            <p class="text-sm text-muted font-mono" id="working-meta"></p>
             <a class="btn btn-sm btn-outline list-uri" id="lst-uri" target="_blank" rel="noreferrer"><span class="mono" id="lst-uri-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
           </div>
         </div>
@@ -826,7 +806,7 @@ _CONSOLE_BODY = (
           <div class="btn-row mt-4 mb-4">
             <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
           </div>
-          <div class="table-surface entries-scroll">
+          <div class="entries-scroll">
             <div class="test-table-wrap">
               <table class="test-table">
                 <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
@@ -931,6 +911,12 @@ _SHARED_SCRIPT = """<script>
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+    }
+
+    // Status values arrive in caps (VALID, REVOKED); chips show them in sentence
+    // case, since DESIGN.md §3 keeps uppercase for eyebrow labels only.
+    function statusLabel(value) {
+      return value.charAt(0) + value.slice(1).toLowerCase();
     }
 
     const ROW_ENTRIES = 64;
@@ -1100,7 +1086,7 @@ _CONSOLE_SCRIPT = """<script>
             return `<tr class="${state}">
               <td class="cell-mono">${item.idx}</td>
               <td class="cell-mono">${escapeHtml(formatDate(item.expiry_date))}</td>
-              <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
+              <td><span class="status-chip status-${state}">${escapeHtml(statusLabel(item.status))}</span></td>
               <td>
                 <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke entry ${item.idx}" ${revoked ? "disabled" : ""}>Revoke</button>
               </td>
@@ -1129,7 +1115,7 @@ _CONSOLE_SCRIPT = """<script>
         ? registry.map((item) => `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}"${item.status_list_uri === activeListUri ? ' aria-current="true"' : ""}>
             <td>
               <span class="list-name">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)}</span>
-              <span class="list-meta"><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span>${item.allocated} allocated · ${item.revoked} revoked</span>
+              <span class="list-meta"><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "Expired" : "Active"}</span><span class="font-mono">${item.allocated} allocated · ${item.revoked} revoked</span></span>
             </td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
             <td class="cell-mono">${escapeHtml(formatDate(item.expires))}</td>
@@ -1489,7 +1475,7 @@ _EXPLORER_SCRIPT = """<script>
         return;
       }
       const name = statusName(statusAt(explored.lst, index));
-      target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(name)}</span>`;
+      target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(statusLabel(name))}</span>`;
     }
 
     function renderExplored(data) {

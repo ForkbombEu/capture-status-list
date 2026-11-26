@@ -43,7 +43,10 @@ def test_console_shows_the_working_list_in_tabs() -> None:
     assert html.index('id="registry-rows"') < html.index('id="working-card"')
     assert html.index('id="working-card"') < html.index('id="entries-panel"')
     assert html.index('id="entries-panel"') < html.index('id="token-panel"')
-    assert html.index('id="token-panel"') < html.index('id="key-panel"')
+    assert html.index('id="token-panel"') < html.index('id="decoded-panel"')
+    # The signing key is one for the whole server: the topbar links its JWKS.
+    assert 'id="key-panel"' not in html
+    assert '<li><a href="/.well-known/jwks.json">TSL JWKS</a></li>' in html
     assert 'id="token-panel" aria-labelledby="tab-token" hidden' in html
     # Failures float in one dismissible alert instead of an output panel.
     assert 'id="notice" class="notice" role="alert" hidden' in html
@@ -76,7 +79,10 @@ def test_registry_inventory_carries_no_row_actions() -> None:
     assert 'data-preview=' not in html
     assert 'data-work-uri=' not in html
     assert "<th>Token formats</th>" not in html
-    assert "<thead><tr><th>List</th><th>List UUID</th><th>Expiry</th></tr></thead>" in html
+    assert (
+        '<thead><tr><th class="col-toggle"></th><th>List</th>'
+        '<th class="col-uuid">List UUID</th><th class="col-expiry">Expiry</th></tr></thead>'
+    ) in html
 
 
 def test_console_declares_the_working_list_context() -> None:
@@ -94,7 +100,7 @@ def test_console_declares_the_working_list_context() -> None:
     # The working-list card stays hidden until a list is chosen; its Entries tab
     # tops the list up and lists the entries, whose country, doctype and URI
     # live in the card title and the Token tab rather than in every row.
-    assert 'id="working-card" aria-labelledby="working-title" hidden' in html
+    assert 'id="working-card" aria-label="Selected status list" hidden' in html
     entries_panel = html[html.index('id="entries-panel"') : html.index('id="token-panel"')]
     assert 'id="entries-count"' in entries_panel
     assert 'id="add-entries"' in entries_panel
@@ -104,15 +110,21 @@ def test_console_declares_the_working_list_context() -> None:
 def test_token_tab_sets_the_encoded_jwt_beside_its_decoded_parts() -> None:
     html = client.get("/").text
 
-    # The list URI sits above the tabs and opens the served token in a new tab.
-    uri_link = 'id="lst-uri" target="_blank" rel="noreferrer"'
-    assert html.index(uri_link) < html.index('id="working-tabs"')
-    token_panel = html[html.index('id="token-panel"') : html.index('id="key-panel"')]
-    assert 'id="lst-uri"' not in token_panel
+    # The list name opens the served token in a new tab; the panel has no URI.
+    assert (
+        '<a class="list-name" href="${escapeHtml(item.status_list_uri)}" '
+        'target="_blank" rel="noreferrer"'
+    ) in html
+    assert 'id="lst-uri"' not in html
+    token_panel = html[html.index('id="token-panel"') : html.index('id="decoded-panel"')]
     columns = token_panel[token_panel.index('class="jwt-columns"') :]
     assert columns.index('id="jwt"') < columns.index('id="jwt-header"') < columns.index('id="jwt-payload"')
     # Encoded and decoded start level: the colour legend sits under the JWT.
     assert columns.index('id="jwt"') < columns.index('class="jwt-legend"')
+    # The inflated list has its own tab, so the Token tab is the JWT alone.
+    decoded_panel = html[html.index('id="decoded-panel"') : html.index('id="notice"')]
+    assert 'id="lst-bitmap-scroll"' in decoded_panel
+    assert 'id="lst-bitmap-scroll"' not in token_panel
 
 
 def test_console_pages_are_not_cached() -> None:

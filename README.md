@@ -346,11 +346,14 @@ pool at a time:
   Enter on it) to work on that pool. Beneath it, `Refresh lists` reloads the
   table and `New status list` opens a country / doctype / expiry form that
   allocates a pool and switches to it.
-- The chosen pool opens in one panel titled with its country and doctype, with
-  three tabs: `Entries` (`Add entries to this list` plus every allocated entry,
-  each with its own `Revoke`), `Token` (the list URI as a link, the encoded JWT
-  beside its decoded header and payload, then the inflated `lst`), and
-  `Signing key` (the JWKS, whose key carries the signer certificate in `x5c`).
+- Clicking a row opens that pool's panel underneath it (the chevron marks the
+  open row; clicking it again closes it), with three tabs: `Entries` (`Add
+  entries to this list` plus every allocated entry, each with its own
+  `Revoke`), `Token` (the encoded JWT beside its decoded header and payload)
+  and `Decoded status list` (counts, the inflated `lst` and the revoked
+  indices). Each list's name opens its URI, the served token, in a new tab.
+  The signing key is the server's, not the list's: the topbar's `TSL JWKS`
+  opens it.
 
 A pool that disappears (state reset, server restart) drops back to the
 unselected view. Failures show in one dismissible alert.

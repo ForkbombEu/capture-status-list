@@ -143,12 +143,17 @@ APP_CSS = """
 
     /* Tables are the brand's Scoreboard pattern (`.test-table`, DESIGN.md §11
        Tables); the console only adds the registry's two-line first cell. */
+    /* The list's name opens its Status List Token URI in a new tab; like the
+       topbar links it is underlined only under the pointer. */
     .list-name {
-      display: block;
+      display: inline-block;
       color: var(--brand-primary);
       font-size: var(--fs-base);
       font-weight: 600;
+      text-decoration: none;
     }
+    .list-name:hover { text-decoration: underline; }
+    .list-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
     .list-meta {
       display: flex;
       flex-wrap: wrap;
@@ -296,19 +301,7 @@ APP_CSS = """
     }
     .jwt-legend .badge { background: var(--bg-muted); }
     .jwt-legend .badge-dot { width: 8px; height: 8px; }
-    /* The working list's URI, under the card title: an outline button whose
-       arrow-up-right says it opens the served token in a new tab. Long URIs
-       wrap instead of stretching the card. */
-    .list-uri {
-      height: auto;
-      min-height: 28px;
-      max-width: 100%;
-      margin-top: var(--space-3);
-      padding-block: var(--space-1);
-      overflow-wrap: anywhere;
-      text-align: left;
-    }
-    /* Icons in buttons (the URI arrow, refresh, new) follow the label colour. */
+    /* Icons in buttons (refresh, new) follow the label colour. */
     .btn svg {
       flex: 0 0 auto;
       width: 14px;
@@ -521,20 +514,49 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
-    /* The registry is the chooser: clicking a row makes it the working list.
-       Rows top-align like the scoreboard; the chosen row takes the soft
-       lavender and an indigo edge, apart from both the hover and the header. */
+    /* The registry is the chooser: clicking a row opens that list's panel under
+       it. Rows top-align like the scoreboard and stay white; the chevron marks
+       the open one, and the usual hairline separates it from its panel. */
     .registry-row { cursor: pointer; }
     .registry-row td { vertical-align: top; }
     .registry-row td.cell-mono { line-height: 20px; }
     .registry-row:hover td { background: var(--bg-muted); }
-    .registry-row[aria-current="true"] td { background: var(--brand-secondary); }
-    .registry-row[aria-current="true"] td:first-child {
-      box-shadow: inset 3px 0 0 var(--brand-primary);
-    }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-    /* The JWKS wraps so the key's long x5c certificate stays readable. */
-    #jwks { white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* The working-list panel opens as a detail row under the chosen list, the
+       way the scoreboard expands a pipeline, with no card of its own. Fixed
+       columns keep a long JWT or JSON line in it from stretching the table. */
+    .registry-table { table-layout: fixed; --toggle-col: 44px; }
+    .registry-table .col-toggle { width: var(--toggle-col); }
+    .registry-table .col-uuid { width: 330px; }
+    .registry-table .col-expiry { width: 120px; }
+    .registry-chevron {
+      display: block;
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      fill: none;
+      stroke: var(--brand-primary);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: transform 150ms ease-out;
+    }
+    .registry-row[aria-expanded="true"] .registry-chevron { transform: rotate(180deg); }
+    /* The brand row hover (`.test-table tr:hover td`) would paint every cell of
+       the panel's own table while the pointer is over the detail row; the panel
+       stays white, its rows keep their own hover and revoked tint. The panel is
+       indented to line up with the List column. */
+    .test-table .registry-detail:hover td { background: transparent; }
+    .test-table .registry-detail > td,
+    .test-table .registry-detail:hover > td {
+      padding: var(--space-4) var(--space-3) var(--space-5) calc(var(--toggle-col) + var(--space-3));
+      background: var(--bg);
+    }
+    .registry-detail .test-table tr:hover td { background: var(--bg-muted); }
+    .registry-detail .test-table tr.revoked td { background: var(--destructive-bg); }
+    @media (prefers-reduced-motion: reduce) {
+      .registry-chevron { transition: none; }
+    }
     .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
     .index-lookup {
       display: flex;
@@ -619,6 +641,7 @@ def _topbar(active: str) -> str:
         ("Console", "/"),
         ("Explorer", "/explorer"),
         ("API docs", "/docs"),
+        ("TSL JWKS", "/.well-known/jwks.json"),
     )
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
@@ -652,7 +675,7 @@ _FOOTER = f"""  <footer class="footer">
             <a href="{TAKE_DOCS_HREF}">Status list API</a>
             <a href="/status/1">Legacy status list token</a>
             <a href="/token_status_list/aggregation">Status list aggregation</a>
-            <a href="/.well-known/jwks.json">JWKS</a>
+            <a href="/.well-known/jwks.json">TSL JWKS</a>
             <a href="/docs">API docs</a>
             <a href="https://github.com/ForkbombEu/capture-status-list"
                target="_blank" rel="noopener">Repository</a>
@@ -747,8 +770,8 @@ _CONSOLE_BODY = (
     <div class="stack">
       <div id="registry">
         <div class="test-table-wrap">
-          <table class="test-table">
-            <thead><tr><th>List</th><th>List UUID</th><th>Expiry</th></tr></thead>
+          <table class="test-table registry-table">
+            <thead><tr><th class="col-toggle"></th><th>List</th><th class="col-uuid">List UUID</th><th class="col-expiry">Expiry</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
@@ -778,18 +801,11 @@ _CONSOLE_BODY = (
         </div>
       </div>
 
-      <section class="card" id="working-card" aria-labelledby="working-title" hidden>
-        <div class="panel-head">
-          <div>
-            <h3 class="subsection-heading" id="working-title"></h3>
-            <p class="text-sm text-muted font-mono" id="working-meta"></p>
-            <a class="btn btn-sm btn-outline list-uri" id="lst-uri" target="_blank" rel="noreferrer"><span class="mono" id="lst-uri-text"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
-          </div>
-        </div>
+      <section id="working-card" aria-label="Selected status list" hidden>
         <div class="tabs" role="tablist" id="working-tabs" aria-label="Working list views">
           <button class="tab-btn active" type="button" role="tab" id="tab-entries" data-tab="entries" aria-selected="true" aria-controls="entries-panel">Entries <span id="allocation-count" class="count-chip">0</span></button>
           <button class="tab-btn" type="button" role="tab" id="tab-token" data-tab="token" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
-          <button class="tab-btn" type="button" role="tab" id="tab-key" data-tab="key" aria-selected="false" aria-controls="key-panel" tabindex="-1">Signing key</button>
+          <button class="tab-btn" type="button" role="tab" id="tab-decoded" data-tab="decoded" aria-selected="false" aria-controls="decoded-panel" tabindex="-1">Decoded status list</button>
         </div>
 
         <div role="tabpanel" id="entries-panel" aria-labelledby="tab-entries">
@@ -838,8 +854,9 @@ _CONSOLE_BODY = (
               <p class="lst-note" id="lst-note"></p>
             </div>
           </div>
+        </div>
 
-          <h4 class="subsection-heading subhead">Status list</h4>
+        <div role="tabpanel" id="decoded-panel" aria-labelledby="tab-decoded" hidden>
           <div class="metric-grid">
             <div class="card">
               <strong class="metric-value" id="lst-bits">0</strong>
@@ -870,11 +887,6 @@ _CONSOLE_BODY = (
           <p class="bitmap-caption" id="lst-caption"></p>
           <p class="eyebrow mt-4">Revoked indices</p>
           <p class="index-list" id="lst-indices">None</p>
-        </div>
-
-        <div role="tabpanel" id="key-panel" aria-labelledby="tab-key" hidden>
-          <p class="eyebrow">JWKS · list signer key</p>
-          <pre id="jwks"></pre>
         </div>
       </section>
 
@@ -1015,6 +1027,9 @@ _CONSOLE_SCRIPT = """<script>
     const allocationRows = document.querySelector("#allocation-rows");
     const allocationCount = document.querySelector("#allocation-count");
     const workingCard = document.querySelector("#working-card");
+    // Where the panel rests while no list is open; re-rendering the rows parks
+    // it here first, so it is never detached from the document.
+    const workingCardHome = workingCard.parentElement;
     const notice = document.querySelector("#notice");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
@@ -1108,34 +1123,39 @@ _CONSOLE_SCRIPT = """<script>
       });
     }
 
-    // The registry is both the inventory and the chooser: clicking a row makes
-    // that list the working list.
+    // The registry is both the inventory and the chooser: clicking a row opens
+    // that list's panel underneath it; clicking the open row closes it.
     function renderRegistry() {
+      workingCardHome.append(workingCard);
       registryRows.innerHTML = registry.length
-        ? registry.map((item) => `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}"${item.status_list_uri === activeListUri ? ' aria-current="true"' : ""}>
+        ? registry.map((item) => {
+            const open = item.status_list_uri === activeListUri;
+            return `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}" aria-expanded="${open}"${open ? ' aria-current="true"' : ""}>
+            <td><svg class="registry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></td>
             <td>
-              <span class="list-name">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)}</span>
+              <a class="list-name" href="${escapeHtml(item.status_list_uri)}" target="_blank" rel="noreferrer" title="Open this list's token in a new tab">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)}</a>
               <span class="list-meta"><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "Expired" : "Active"}</span><span class="font-mono">${item.allocated} allocated · ${item.revoked} revoked</span></span>
             </td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
             <td class="cell-mono">${escapeHtml(formatDate(item.expires))}</td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">No country × doctype list allocated yet.</td></tr>`;
+          </tr>`;
+          }).join("")
+        : `<tr class="empty-row"><td colspan="4">No country × doctype list allocated yet.</td></tr>`;
+      const openRow = registryRows.querySelector('tr[aria-current="true"]');
+      if (!openRow) return;
+      const detail = document.createElement("tr");
+      detail.className = "registry-detail";
+      const cell = document.createElement("td");
+      cell.colSpan = 4;
+      cell.append(workingCard);
+      detail.append(cell);
+      openRow.after(detail);
     }
 
-    // The working-list card follows the chosen list.
+    // The working-list panel follows the chosen list.
     function renderContext() {
       const pool = workingPool();
       workingCard.hidden = !pool;
-      if (pool) {
-        document.querySelector("#working-title").textContent = `${pool.country} · ${pool.doctype}`;
-        document.querySelector("#working-meta").textContent =
-          `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
-          (pool.expired ? "expired" : `expires ${formatDate(pool.expires)}`);
-        const link = document.querySelector("#lst-uri");
-        link.href = pool.status_list_uri;
-        document.querySelector("#lst-uri-text").textContent = pool.status_list_uri;
-      }
       renderRegistry();
       renderAllocations();
     }
@@ -1177,7 +1197,13 @@ _CONSOLE_SCRIPT = """<script>
         tab.classList.toggle("active", active);
         tab.setAttribute("aria-selected", String(active));
         tab.tabIndex = active ? 0 : -1;
-        document.getElementById(tab.getAttribute("aria-controls")).hidden = !active;
+        const panel = document.getElementById(tab.getAttribute("aria-controls"));
+        panel.hidden = !active;
+        // A bitmap laid out while its tab was hidden measured nothing; a scroll
+        // event makes it re-measure its minimap viewport now that it shows.
+        if (active) {
+          panel.querySelectorAll(".bitmap-scroll").forEach((scroll) => scroll.dispatchEvent(new Event("scroll")));
+        }
       }
     }
     tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
@@ -1192,16 +1218,26 @@ _CONSOLE_SCRIPT = """<script>
     };
 
     function chooseRow(event) {
+      if (event.target.closest("a")) return;  // the list name opens its URI instead
       const row = event.target.closest("tr[data-list]");
       if (!row) return;
+      const uri = row.dataset.list;
       guard(async () => {
-        await selectList(row.dataset.list);
+        if (uri === activeListUri) {
+          activeListUri = null;      // the open row closes its panel
+          renderContext();
+        } else {
+          await selectList(uri);
+        }
         // Re-rendering the registry drops focus; keyboard users keep their row.
-        if (event.type === "keydown") registryRows.querySelector('tr[aria-current="true"]')?.focus();
+        if (event.type === "keydown") registryRows.querySelector(`tr[data-list="${CSS.escape(uri)}"]`)?.focus();
       });
     }
     registryRows.onclick = chooseRow;
+    // Only a focused row reacts to Enter and Space: the open panel lives in the
+    // same table body, and its inputs and buttons keep their own keys.
     registryRows.onkeydown = (event) => {
+      if (!event.target.matches("tr[data-list]")) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       chooseRow(event);
@@ -1267,7 +1303,6 @@ _CONSOLE_SCRIPT = """<script>
       renderJwt(data.token);
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
-      document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
       document.querySelector("#lst-bits").textContent = data.bits;
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
@@ -1276,7 +1311,7 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-note").textContent =
         `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
         `${data.lst.inflated_bytes} bytes holding ${data.lst.entries} entries at ` +
-        `${data.bits} bit per entry. The inflated entries are shown below.`;
+        `${data.bits} bit per entry. The Decoded status list tab shows the inflated entries.`;
 
       const shown = data.revoked_indices.slice(0, 200);
       const rest = data.revoked_indices.length - shown.length;

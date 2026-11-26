@@ -13,8 +13,11 @@ where `lst` is the zlib-compressed status byte array encoded as base64url
 without padding in JWT form (raw compressed bytes in CWT form).
 
 CWT tokens are RFC 9052 COSE_Sign1 (tag 18): ES256 over the `Signature1`
-Sig_structure, a 64-byte `r || s` signature, and the country `kid` (for
-example `EU-status-list`) in the unprotected header, matching the JWT `kid`.
+Sig_structure, a 64-byte `r || s` signature, and the `kid` in the unprotected
+header, matching the JWT `kid`. Every token's `kid` is the RFC 7638 thumbprint
+of the key that signed it, so one key has one `kid` wherever it signs, and
+`GET /.well-known/jwks.json` (the console's `TSL JWKS` link) lists each signing
+key once, with its certificate in `x5c` when it has one.
 Every Status List and Identifier List token, JWT and CWT alike, carries `exp`
 (CWT label 4) and `ttl` (CWT label 65534); see [Token lifetime](#token-lifetime).
 
@@ -316,10 +319,9 @@ curl http://localhost:8000/token_status_list/aggregation
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
 the console, and `GET /debug/status-list` decodes one of them:
 `?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
-out decodes the legacy `/status/1` list. Its `jwks` carries the signer
-certificate in each key's `x5c` (RFC 7517 §4.7) whenever the token header does.
-The console decodes the chosen list with it, so a revocation made through the
-API shows up in the decoded status list, not only in the entries table.
+out decodes the legacy `/status/1` list. The console decodes the chosen list
+with it, so a revocation made through the API shows up in the decoded status
+list, not only in the entries table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
 endpoint, and starts or tops up pools through a second one:
@@ -401,8 +403,8 @@ Read a raw status value through the debug-only endpoint:
 curl http://localhost:8000/debug/status/42
 ```
 
-Decode a Status List Token — header, payload, the inflated `lst`
-and the signing JWKS — through the debug-only endpoint the console uses. Append
+Decode a Status List Token — header, payload and the inflated `lst` — through
+the debug-only endpoint the console uses. Append
 `?uri=<status-list-uri>` to decode an API-allocated list instead of the legacy
 `/status/1` list. The `lst` field carries the compressed and inflated byte
 counts plus a readable window of the inflated entries, one hex digit per entry

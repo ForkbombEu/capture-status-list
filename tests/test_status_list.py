@@ -128,11 +128,12 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
 
     assert decoded["warning"] == "TEST/DEBUG ONLY"
     assert decoded["token"].count(".") == 2
-    assert decoded["header"] == {
-        "alg": "ES256",
-        "kid": "mock-eudi-status-list-1",
-        "typ": "statuslist+jwt",
-    }
+    assert decoded["header"]["alg"] == "ES256"
+    assert decoded["header"]["typ"] == "statuslist+jwt"
+    assert "x5c" not in decoded["header"]
+    # The kid names the signing key in the server JWKS (its RFC 7638 thumbprint).
+    jwks_kids = {key["kid"] for key in client.get("/.well-known/jwks.json").json()["keys"]}
+    assert decoded["header"]["kid"] in jwks_kids
     assert decoded["payload"]["sub"] == "http://localhost:8000/status/1"
     assert decoded["payload"]["status_list"]["bits"] == 1
     assert decoded["bits"] == 1
@@ -161,7 +162,6 @@ def test_debug_status_list_decodes_token_header_payload_and_lst() -> None:
     assert lst["window"][valid["idx"] - start] == "0"
     assert set(lst["window"]) == {"0", "1"}
 
-    assert decoded["jwks"]["keys"][0]["kid"] == "mock-eudi-status-list-1"
     # ES256 signatures are randomized and each call re-issues the token, so
     # compare the encoded list rather than the token bytes.
     served = client.get(

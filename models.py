@@ -177,7 +177,6 @@ class StatusListDebugResponse(BaseModel):
     assignment_offset: int = 0
     assignment_limit: int = 100
     assignment_total: int = 0
-    jwks: dict[str, list[dict[str, str | list[str]]]]
 
 
 class StatusListExploreRequest(BaseModel):

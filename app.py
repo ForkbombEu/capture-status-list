@@ -23,7 +23,6 @@ from issuer import (
     debug_status_at,
     eudi_allocated_entries,
     eudi_list_summaries,
-    eudi_public_jwks,
     eudi_registry,
     eudi_status_at,
     eudi_list_version,
@@ -32,7 +31,7 @@ from issuer import (
     list_credential_records,
     mark_credential_verification,
     list_version,
-    public_jwks,
+    server_jwks,
     reset_eudi_registry,
     reset_state,
     set_eudi_status,
@@ -569,8 +568,8 @@ def status_list_token(request: Request) -> Response:
 
 
 @app.get("/.well-known/jwks.json")
-def jwks() -> dict[str, list[dict[str, str]]]:
-    return public_jwks()
+def jwks() -> dict[str, list[dict[str, str | list[str]]]]:
+    return server_jwks()
 
 
 @app.post("/verify/{credential_id}", response_model=VerifyResponse)
@@ -673,7 +672,6 @@ def _legacy_status_list_debug(
         assignment_offset=assignment_offset,
         assignment_limit=assignment_limit,
         assignment_total=assignment_total,
-        jwks=public_jwks(),
     )
 
 
@@ -720,7 +718,6 @@ def _allocated_status_list_debug(uri: str, assignment_limit: int) -> StatusListD
         ),
         assignments=[],
         assignment_limit=assignment_limit,
-        jwks=eudi_public_jwks(state.country),
     )
 
 

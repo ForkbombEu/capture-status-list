@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app import app
 from cwt_codec import decode_cwt
-from issuer import public_key_pem, reset_eudi_registry, reset_state
+from issuer import eudi_registry, public_key_pem, reset_eudi_registry, reset_state
 from key_material import jwk_thumbprint
 from verifier import check_status
 
@@ -268,6 +268,32 @@ def test_dashboard_creates_and_tops_up_a_status_list() -> None:
     assert topped_up["status_list_uri"] == body["status_list_uri"]
     assert not set(topped_up["allocated"]) & set(body["allocated"])
     assert client.get("/debug/status-lists").json()[0]["allocated"] == 5
+
+
+def test_dashboard_adds_entries_only_to_the_chosen_list(monkeypatch) -> None:
+    monkeypatch.setattr(eudi_registry, "size", 2)
+    pool = {"country": "ZZDEMO", "doctype": "org.iso.18013.5.1.mDL", "expiry_date": "2099-12-31"}
+    full = client.post("/dashboard/status-lists", json={**pool, "count": 2}).json()
+    current = client.post("/dashboard/status-lists", json={**pool, "count": 1}).json()
+    assert current["status_list_uri"] != full["status_list_uri"]
+
+    # The chosen list has room: the entry lands in it.
+    added = client.post(
+        "/dashboard/status-lists/entries",
+        json={"status_list_uri": current["status_list_uri"], "count": 1},
+    )
+    assert added.status_code == 200
+    assert added.json()["status_list_uri"] == current["status_list_uri"]
+
+    # The chosen list is full: refused, never rolled over into another list.
+    refused = client.post(
+        "/dashboard/status-lists/entries",
+        json={"status_list_uri": full["status_list_uri"], "count": 1},
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "the list has 0 free entries left"
+    allocated = {item["status_list_uri"]: item["allocated"] for item in client.get("/debug/status-lists").json()}
+    assert allocated == {full["status_list_uri"]: 2, current["status_list_uri"]: 2}
 
 
 def test_dashboard_status_list_rejects_a_past_expiry() -> None:

@@ -339,6 +339,10 @@ def take_eudi_reference(
     return eudi_registry.take(country, doctype, expiry_date, allocation_id)
 
 
+def take_eudi_entries(uri: str, expiry_date: str, count: int):
+    return eudi_registry.take_from(uri, expiry_date, count)
+
+
 def eudi_status_at(uri: str, idx: int) -> int:
     return eudi_registry.status_at(uri, idx)
 

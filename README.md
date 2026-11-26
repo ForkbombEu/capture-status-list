@@ -335,6 +335,17 @@ curl -X POST http://localhost:8000/dashboard/status-lists \
   -d '{"country":"EU","doctype":"org.iso.18013.5.1.mDL","expiry_date":"2099-12-31","count":10}'
 ```
 
+`POST /dashboard/status-lists/entries` tops up one chosen list instead: it
+allocates `count` entries in `status_list_uri` only, and answers `400` when that
+list has no room rather than rolling over into a new list of the pool. The
+console's `Add` uses it, so entries always land in the open list:
+
+```sh
+curl -X POST http://localhost:8000/dashboard/status-lists/entries \
+  -H 'content-type: application/json' \
+  -d '{"status_list_uri":"http://localhost:8000/token_status_list/EU/org.iso.18013.5.1.mDL/<uuid>","expiry_date":"2099-12-31","count":10}'
+```
+
 The reference-compatible `take` and `set` endpoints remain API-key-protected.
 
 Every allocated country × doctype pool is a resource of its own: revoking an

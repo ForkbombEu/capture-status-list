@@ -109,17 +109,32 @@ APP_CSS = """
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
-    .batch-fields {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0 var(--space-3);
+    /* Form rows (DESIGN.md §11): each label sits above its control as a
+       sub-heading, controls match the brand's 44px form-row select, and the
+       primary button closes the row. Narrow fields keep their width, a grow
+       field takes the rest, and on phones every control takes the full width. */
+    .form-row > .form-field-sm { flex: 0 0 140px; }
+    .form-row > .form-field-md { flex: 0 0 200px; }
+    .form-row .form-field input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 var(--space-3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--fg);
+      font: 600 var(--fs-base) var(--font-sans);
+      box-shadow: none;
     }
-    .batch-fields .field-label { margin-top: var(--space-3); }
-    @media (max-width: 900px) {
-      .batch-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-row .form-field input:focus {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+      border-color: var(--border-strong);
+      box-shadow: none;
     }
-    @media (max-width: 560px) {
-      .batch-fields { grid-template-columns: 1fr; }
+    @media (max-width: 768px) {
+      .form-row > .form-field-sm,
+      .form-row > .form-field-md { flex: 1 1 100%; }
     }
     .test-table-wrap { max-width: 100%; }
     .field-label {
@@ -780,23 +795,21 @@ _CONSOLE_BODY = (
           <button id="new-list-toggle" class="btn btn-lg btn-primary" aria-expanded="false" aria-controls="new-list-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New status list</button>
         </div>
         <div id="new-list-form" class="mt-4" hidden>
-          <div class="batch-fields">
-            <div>
-              <label class="field-label" for="new-country">Country</label>
+          <div class="form-row">
+            <label class="form-field form-field-sm">
+              <span class="subsection-heading">Country</span>
               <input id="new-country" type="text" value="EU" maxlength="16">
-            </div>
-            <div>
-              <label class="field-label" for="new-doctype">Doctype</label>
+            </label>
+            <label class="form-field form-field-grow">
+              <span class="subsection-heading">Doctype</span>
               <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-            </div>
-            <div>
-              <label class="field-label" for="new-expiry">List expiry</label>
+            </label>
+            <label class="form-field form-field-md">
+              <span class="subsection-heading">List expiry</span>
               <input id="new-expiry" type="date" value="2099-12-31">
-            </div>
-          </div>
-          <div class="btn-row mt-4">
-            <button id="new-list" class="btn btn-lg btn-primary">Create status list</button>
-            <button id="new-list-cancel" class="btn btn-lg btn-outline">Cancel</button>
+            </label>
+            <button id="new-list-cancel" class="btn btn-lg btn-outline" type="button">Cancel</button>
+            <button id="new-list" class="btn btn-lg btn-primary" type="button">Create</button>
           </div>
         </div>
       </div>
@@ -809,25 +822,29 @@ _CONSOLE_BODY = (
         </div>
 
         <div role="tabpanel" id="entries-panel" aria-labelledby="tab-entries">
-          <div class="batch-fields">
-            <div>
-              <label class="field-label" for="entries-count">Count</label>
-              <input id="entries-count" type="number" min="1" max="500" value="10">
-            </div>
-            <div>
-              <label class="field-label" for="entries-expiry">Entry expiry</label>
-              <input id="entries-expiry" type="date" value="2099-12-31">
-            </div>
-          </div>
-          <div class="btn-row mt-4 mb-4">
-            <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
-          </div>
           <div class="entries-scroll">
             <div class="test-table-wrap">
               <table class="test-table">
                 <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="allocation-rows"></tbody>
               </table>
+            </div>
+          </div>
+          <div class="btn-row mt-4">
+            <button id="add-entries-toggle" class="btn btn-lg btn-outline" type="button" aria-expanded="false" aria-controls="add-entries-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add entries</button>
+          </div>
+          <div id="add-entries-form" class="mt-4" hidden>
+            <div class="form-row">
+              <label class="form-field form-field-sm">
+                <span class="subsection-heading">Count</span>
+                <input id="entries-count" type="number" min="1" max="500" value="10">
+              </label>
+              <label class="form-field form-field-md">
+                <span class="subsection-heading">Entry expiry</span>
+                <input id="entries-expiry" type="date" value="2099-12-31">
+              </label>
+              <button id="add-entries-cancel" class="btn btn-lg btn-outline" type="button">Cancel</button>
+              <button id="add-entries" class="btn btn-lg btn-primary" type="button">Add</button>
             </div>
           </div>
         </div>
@@ -1183,7 +1200,10 @@ _CONSOLE_SCRIPT = """<script>
 
     // The single context switch: pick a list, then read its signed token.
     async function selectList(uri) {
-      if (uri !== activeListUri) showTab("entries");
+      if (uri !== activeListUri) {
+        showTab("entries");
+        showAddEntriesForm(false);
+      }
       activeListUri = uri;
       renderContext();
       await showCard(uri);
@@ -1243,32 +1263,48 @@ _CONSOLE_SCRIPT = """<script>
       chooseRow(event);
     };
 
-    // Top-up of the working list: entries only, no credentials.
+    // A button that opens the form under it on demand, so the tables come
+    // first: `New status list` under the lists, `Add entries` under the entries.
+    function revealer(toggle, form, firstField) {
+      const show = (visible) => {
+        form.hidden = !visible;
+        toggle.setAttribute("aria-expanded", String(visible));
+        if (visible) firstField.focus();
+      };
+      toggle.onclick = () => show(form.hidden);
+      return show;
+    }
+
+    const showAddEntriesForm = revealer(
+      document.querySelector("#add-entries-toggle"),
+      document.querySelector("#add-entries-form"),
+      document.querySelector("#entries-count"),
+    );
+    document.querySelector("#add-entries-cancel").onclick = () => showAddEntriesForm(false);
+
+    // Top-up of the working list: entries land in this list only, or the
+    // server refuses them (a full list is never rolled over into another).
     document.querySelector("#add-entries").onclick = () => guard(async () => {
       const pool = workingPool();
       if (!pool) return notify("Click a country × doctype list first.", "info");
-      await jsonFetch("/dashboard/status-lists", {
+      await jsonFetch("/dashboard/status-lists/entries", {
         method: "POST",
         body: JSON.stringify({
-          country: pool.country,
-          doctype: pool.doctype,
+          status_list_uri: pool.status_list_uri,
           expiry_date: document.querySelector("#entries-expiry").value || pool.expires,
           count: Number(document.querySelector("#entries-count").value || 10),
         }),
       });
+      showAddEntriesForm(false);
       await load();
       await refreshCard();
     });
 
-    const newListForm = document.querySelector("#new-list-form");
-    const newListToggle = document.querySelector("#new-list-toggle");
-    function showNewListForm(visible) {
-      newListForm.hidden = !visible;
-      newListToggle.setAttribute("aria-expanded", String(visible));
-      if (visible) document.querySelector("#new-country").focus();
-    }
-
-    newListToggle.onclick = () => showNewListForm(newListForm.hidden);
+    const showNewListForm = revealer(
+      document.querySelector("#new-list-toggle"),
+      document.querySelector("#new-list-form"),
+      document.querySelector("#new-country"),
+    );
     document.querySelector("#new-list-cancel").onclick = () => showNewListForm(false);
 
     document.querySelector("#new-list").onclick = () => guard(async () => {

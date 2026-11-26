@@ -97,14 +97,23 @@ def test_console_declares_the_working_list_context() -> None:
     assert 'id="new-list-toggle" class="btn btn-lg btn-primary"' in registry
     assert 'id="new-list-form" class="mt-4" hidden' in registry
     assert 'id="new-list" class="btn btn-lg btn-primary"' in registry
-    # The working-list card stays hidden until a list is chosen; its Entries tab
-    # tops the list up and lists the entries, whose country, doctype and URI
-    # live in the card title and the Token tab rather than in every row.
+    # Both forms are form rows (DESIGN.md §11) whose primary button comes last.
+    new_list_form = registry[registry.index('id="new-list-form"') :]
+    assert '<div class="form-row">' in new_list_form
+    assert new_list_form.index('id="new-list-cancel"') < new_list_form.index('id="new-list"')
+    # The working-list card stays hidden until a list is chosen. Its Entries tab
+    # leads with the entries table; the top-up form waits behind a button under
+    # it, and its entries go to the open list itself, never to another one.
     assert 'id="working-card" aria-label="Selected status list" hidden' in html
     entries_panel = html[html.index('id="entries-panel"') : html.index('id="token-panel"')]
-    assert 'id="entries-count"' in entries_panel
-    assert 'id="add-entries"' in entries_panel
     assert "<th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th>" in entries_panel
+    assert entries_panel.index('id="allocation-rows"') < entries_panel.index('id="add-entries-toggle"')
+    assert 'id="add-entries-form" class="mt-4" hidden' in entries_panel
+    add_form = entries_panel[entries_panel.index('id="add-entries-form"') :]
+    assert '<div class="form-row">' in add_form
+    assert add_form.index('id="entries-count"') < add_form.index('id="add-entries-cancel"')
+    assert add_form.index('id="add-entries-cancel"') < add_form.index('id="add-entries"')
+    assert '"/dashboard/status-lists/entries"' in html
 
 
 def test_token_tab_sets_the_encoded_jwt_beside_its_decoded_parts() -> None:

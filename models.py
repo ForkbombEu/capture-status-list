@@ -34,6 +34,14 @@ class DashboardStatusListCreateResponse(BaseModel):
     allocated: list[int]
 
 
+class DashboardStatusListEntriesRequest(BaseModel):
+    """Dashboard-only top-up of one specific status list."""
+
+    status_list_uri: str = Field(min_length=1)
+    expiry_date: str = Field(default="2099-12-31", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    count: int = Field(default=1, ge=1, le=500)
+
+
 class CredentialResponse(BaseModel):
     credential_id: str
     idx: int
@@ -177,7 +185,6 @@ class StatusListDebugResponse(BaseModel):
     assignment_offset: int = 0
     assignment_limit: int = 100
     assignment_total: int = 0
-    jwks: dict[str, list[dict[str, str]]]
 
 
 class StatusListExploreRequest(BaseModel):

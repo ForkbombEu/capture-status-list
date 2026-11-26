@@ -23,7 +23,6 @@ from issuer import (
     debug_status_at,
     eudi_allocated_entries,
     eudi_list_summaries,
-    eudi_public_jwks,
     eudi_registry,
     eudi_status_at,
     eudi_list_version,
@@ -32,11 +31,12 @@ from issuer import (
     list_credential_records,
     mark_credential_verification,
     list_version,
-    public_jwks,
+    server_jwks,
     reset_eudi_registry,
     reset_state,
     set_eudi_status,
     status_list_uris,
+    take_eudi_entries,
     take_eudi_reference,
     revoke_credential_record,
 )
@@ -54,6 +54,7 @@ from models import (
     CredentialResponse,
     DashboardStatusListCreateRequest,
     DashboardStatusListCreateResponse,
+    DashboardStatusListEntriesRequest,
     DebugStatusResponse,
     RandomBatchCreateRequest,
     RandomBatchCreateResponse,
@@ -281,6 +282,34 @@ def create_dashboard_status_list(
         allocated=allocated,
     )
 
+
+@app.post(
+    "/dashboard/status-lists/entries",
+    response_model=DashboardStatusListCreateResponse,
+    include_in_schema=False,
+)
+def add_dashboard_status_list_entries(
+    request: DashboardStatusListEntriesRequest,
+) -> DashboardStatusListCreateResponse:
+    """Dashboard-only top-up of one chosen list.
+
+    Unlike `POST /dashboard/status-lists`, which allocates in the current
+    country × doctype pool, this allocates only in `status_list_uri` and
+    refuses a list without room instead of rolling over into a new one.
+    """
+    try:
+        references = take_eudi_entries(
+            request.status_list_uri, request.expiry_date, request.count
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DashboardStatusListCreateResponse(
+        status_list_uri=references[0].status_list_uri,
+        identifier_list_uri=references[0].identifier_list_uri,
+        allocated=[reference.idx for reference in references],
+    )
 
 
 async def _reference_form(request: Request) -> dict[str, str]:
@@ -569,8 +598,8 @@ def status_list_token(request: Request) -> Response:
 
 
 @app.get("/.well-known/jwks.json")
-def jwks() -> dict[str, list[dict[str, str]]]:
-    return public_jwks()
+def jwks() -> dict[str, list[dict[str, str | list[str]]]]:
+    return server_jwks()
 
 
 @app.post("/verify/{credential_id}", response_model=VerifyResponse)
@@ -673,7 +702,6 @@ def _legacy_status_list_debug(
         assignment_offset=assignment_offset,
         assignment_limit=assignment_limit,
         assignment_total=assignment_total,
-        jwks=public_jwks(),
     )
 
 
@@ -720,7 +748,6 @@ def _allocated_status_list_debug(uri: str, assignment_limit: int) -> StatusListD
         ),
         assignments=[],
         assignment_limit=assignment_limit,
-        jwks=eudi_public_jwks(state.country),
     )
 
 

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app import app
 from issuer import reset_eudi_registry, reset_state
+from key_material import jwk_thumbprint
 from status_list import generate_status_list_token
 from verifier import VerificationError, check_status
 
@@ -104,7 +105,7 @@ def test_eudi_status_list_token_verifies_with_its_x5c_certificate(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setenv("EUDI_KEY_DIR", str(tmp_path))
-    _write_country_material(tmp_path, "EU")
+    _, certificate_der = _write_country_material(tmp_path, "EU")
 
     reference = client.post(
         "/token_status_list/take",
@@ -122,7 +123,9 @@ def test_eudi_status_list_token_verifies_with_its_x5c_certificate(
     ).text
 
     header = jwt.get_unverified_header(token)
-    assert header["kid"] == "EU-status-list"
+    # An operator key's kid is its RFC 7638 thumbprint, the key in x5c.
+    certificate = x509.load_der_x509_certificate(certificate_der)
+    assert header["kid"] == jwk_thumbprint(certificate.public_key())
     assert header["x5c"]
 
     assert check_status(idx, token, expected_subject=uri) == "VALID"

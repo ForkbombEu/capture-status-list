@@ -9,6 +9,9 @@ header without operator setup.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -46,15 +49,37 @@ def _validate_country(country: str) -> str:
     return country
 
 
-def country_kid(country: str) -> str:
-    """Return the stable key identifier used for a country's status lists."""
+def jwk_thumbprint(public_key: ec.EllipticCurvePublicKey) -> str:
+    """Return the RFC 7638 SHA-256 thumbprint of a P-256 key, base64url-encoded.
 
-    return f"{_validate_country(country)}-status-list"
+    Used as the ``kid``: one key gets one identifier wherever it signs, and two
+    different keys never share one.
+    """
+
+    if not isinstance(public_key.curve, ec.SECP256R1):
+        raise ValueError("only P-256 signing keys are supported")
+    numbers = public_key.public_numbers()
+    members = {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": _base64url(numbers.x.to_bytes(32, "big")),
+        "y": _base64url(numbers.y.to_bytes(32, "big")),
+    }
+    canonical = json.dumps(members, separators=(",", ":"), sort_keys=True)
+    return _base64url(hashlib.sha256(canonical.encode("ascii")).digest())
 
 
-# Descriptive aliases keep the country-to-kid operation discoverable to callers.
-kid_for_country = country_kid
-country_to_kid = country_kid
+def pem_kid(private_pem: str) -> str:
+    """Return the ``kid`` of the key a PEM private key signs with."""
+
+    private_key = serialization.load_pem_private_key(
+        private_pem.encode("ascii"), password=None
+    )
+    return jwk_thumbprint(private_key.public_key())
+
+
+def _base64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
 def _key_dir() -> Path:
@@ -118,7 +143,6 @@ class CountryKeyMaterial:
     country: str
     private_key_path: Path
     certificate_path: Path | None
-    kid: str
 
     def __post_init__(self) -> None:
         _validate_country(self.country)
@@ -180,7 +204,6 @@ def material_for(country: str) -> CountryKeyMaterial:
             country=country,
             private_key_path=private_path,
             certificate_path=certificate_path,
-            kid=country_kid(country),
         )
     private_path = _load_or_create_local_key(key_dir)
     certificate_path = _ensure_local_certificate(key_dir, private_path)
@@ -188,14 +211,12 @@ def material_for(country: str) -> CountryKeyMaterial:
         country=country,
         private_key_path=private_path,
         certificate_path=certificate_path,
-        kid=country_kid(country),
     )
 
 
 __all__ = [
     "CountryKeyMaterial",
-    "country_kid",
-    "country_to_kid",
-    "kid_for_country",
+    "jwk_thumbprint",
     "material_for",
+    "pem_kid",
 ]

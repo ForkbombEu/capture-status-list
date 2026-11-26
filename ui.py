@@ -13,9 +13,12 @@ layouts and behaviours absent from the brand foundation are declared here.
 BRAND_ROOT = "/brand"
 STYLE_HREF = f"{BRAND_ROOT}/style.css"
 LOGO_MARK = f"{BRAND_ROOT}/logos/credimi_logo.svg"
-LOGO_WORDMARK = f"{BRAND_ROOT}/logos/credimi_logo-transp.svg"
 LOGO_WORDMARK_WHITE = f"{BRAND_ROOT}/logos/credimi_logo-transp_white.svg"
 CREDIMI_URL = "https://credimi.io"
+# `POST /token_status_list/take` answers a browser GET with 405, so its links
+# open the operation in the API docs (Swagger UI deep link: untagged routes sit
+# under "default", addressed by FastAPI's generated operationId).
+TAKE_DOCS_HREF = "/docs#/default/take_status_list_token_status_list_take_post"
 
 APP_CSS = """
     /* Application layer — loaded after the brand stylesheet.
@@ -78,144 +81,96 @@ APP_CSS = """
 
     .footer-brand h5 { color: var(--fg-on-primary); margin-bottom: var(--space-2); }
 
-    /* Logo links carry no underline: the brand rule underlines every anchor. */
-    .topbar-logo { display: block; text-decoration: none; }
+    /* Topbar lockup: the Credimi mark at its 32px minimum (DESIGN.md §4), then
+       the service name. Logo links carry no underline: the brand rule
+       underlines every anchor. */
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      height: auto;
+      color: var(--fg);
+      text-decoration: none;
+    }
+    .topbar-logo img { width: 32px; height: 32px; }
+    .topbar-title {
+      font: 700 var(--fs-md)/1 var(--font-display);
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    /* Below 480px the name and the nav no longer fit the 56px bar side by side;
+       the mark alone stays as the home link. */
+    @media (max-width: 480px) {
+      .topbar-title { display: none; }
+    }
     .extras-bottom a { text-decoration: none; }
 
     /* Grid items default to min-width:auto, so the table's own min-width would
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
-    .batch-card { max-width: none; }
-    /* Page gutter: the topbar, hero, content and footer share one fixed side
-       gutter so their edges line up, and they grow with the window instead of
-       stopping at the brand max-width. Small screens keep the brand gutter. */
-    :root { --page-gutter: 46px; }
-    .topbar-inner, .hero-inner, .container, .footer-inner {
-      max-width: none;
-      padding-left: var(--page-gutter);
-      padding-right: var(--page-gutter);
-    }
-    @media (max-width: 768px) {
-      :root { --page-gutter: var(--space-4); }
-    }
-    /* Console layout: a two-column dashboard inside the page gutter —
-       forms and info on the left, results on the right, so every CTA
-       produces feedback the user can see without scrolling away. */
-    .console-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-      align-items: start;
-      gap: var(--space-6);
-    }
-    .console-right {
-      position: sticky;
-      top: calc(var(--topbar-height) + var(--space-4));
-      max-height: calc(100vh - var(--topbar-height) - 2 * var(--space-4));
-      overflow-y: auto;
-    }
-    @media (max-width: 1100px) {
-      .console-grid { grid-template-columns: 1fr; }
-      .console-right {
-        position: static;
-        max-height: none;
-        overflow-y: visible;
-      }
-    }
-    .batch-fields {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0 var(--space-3);
-    }
-    .batch-fields .field-label { margin-top: var(--space-3); }
-    @media (max-width: 900px) {
-      .batch-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 560px) {
-      .batch-fields { grid-template-columns: 1fr; }
-    }
     .test-table-wrap { max-width: 100%; }
-    .field-label {
-      display: block;
-      margin: var(--space-3) 0 var(--space-2);
-      font-size: var(--fs-sm);
-      font-weight: 500;
-    }
-    input[type="number"] {
-      font-family: var(--font-sans);
-      font-size: var(--fs-base);
-      height: 36px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
-      width: 100%;
-      transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
-    }
 
-    .credential-scroll {
+    /* Tables are the brand's Scoreboard pattern (`.test-table`, DESIGN.md §11
+       Tables); the console only adds the registry's two-line first cell. */
+    /* The list's name opens its Status List Token URI in a new tab; like the
+       topbar links it is underlined only under the pointer. */
+    .list-name {
+      display: inline-block;
+      color: var(--brand-primary);
+      font-size: var(--fs-base);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .list-name:hover { text-decoration: underline; }
+    .list-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .list-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      margin-top: var(--space-1);
+      color: var(--fg-muted);
+      font-size: var(--fs-xs);
+    }
+    .list-meta .status-chip { height: 20px; padding: 0 var(--space-2); }
+    /* The entries table scrolls under its sticky 40px header band (brand
+       `.test-table th`), so its scrollbar track starts below the band, and the
+       box's top 40px take the band's lavender to fill the gutter beside it: a
+       flat fill with a hard stop, not a visible gradient. Firefox has no track
+       margin; there the thin bar runs alongside the header. */
+    .entries-scroll {
       max-height: 420px;
       overflow: auto;
-      border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--bg);
+      background: linear-gradient(var(--brand-secondary-strong) 40px, var(--bg) 40px);
     }
-    .credential-scroll .test-table-wrap { overflow: visible; }
-    .decoded-credentials-scroll {
-      max-height: 420px;
-      overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--bg);
-    }
-    .decoded-credentials-scroll .test-table-wrap { overflow: visible; }
-    input[type="number"]:focus {
-      outline: none;
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px oklch(0.2955 0.1659 277.31 / 0.18);
-    }
+    .entries-scroll::-webkit-scrollbar-track { margin-top: 40px; }
+    .entries-scroll .test-table-wrap { overflow: visible; }
 
     .btn-secondary {
       background: var(--brand-secondary-deep);
       color: var(--brand-primary);
     }
     .btn-secondary:hover { background: var(--brand-secondary-strong); }
-    .btn-success {
-      background: var(--success);
-      color: var(--fg-on-primary);
+    /* A disabled action keeps its label and turns muted: a revoked entry still
+       reads "Revoke", greyed out. */
+    .btn:disabled,
+    .btn:disabled:hover {
+      background: var(--bg-muted);
+      color: var(--fg-muted);
+      cursor: not-allowed;
     }
-    .btn-success:hover { background: var(--success-border); }
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .btn-stack { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
-    .btn-row .btn, .btn-stack .btn { justify-content: center; }
-
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    .metric-value {
-      display: block;
-      font: 700 var(--fs-3xl)/1 var(--font-display);
-      letter-spacing: -0.007em;
-      color: var(--brand-primary);
-      margin-bottom: var(--space-2);
-    }
+    .btn-row .btn { justify-content: center; }
 
     .test-table { min-width: 680px; }
     .test-table td { vertical-align: middle; }
-    .test-table input[type="checkbox"] {
-      accent-color: var(--brand-primary);
-      width: 16px;
-      height: 16px;
-    }
     .test-table td.cell-mono {
       font-family: var(--font-mono);
       font-size: var(--fs-xs);
       white-space: nowrap;
     }
-    .test-table td.cell-select { width: 32px; }
     .test-table tr.revoked td { background: var(--destructive-bg); }
     .test-table .empty-row td {
       color: var(--fg-subtle);
@@ -226,12 +181,8 @@ APP_CSS = """
     .status-valid::before { background: var(--success); }
     .status-revoked { background: var(--destructive-bg); color: var(--destructive); }
     .status-revoked::before { background: var(--destructive); }
-    .status-accept { background: var(--success-bg); color: var(--success); }
-    .status-accept::before { background: var(--success); }
     .status-reject { background: var(--destructive-bg); color: var(--destructive); }
     .status-reject::before { background: var(--destructive); }
-    .status-unchecked { background: var(--bg-muted); color: var(--fg-subtle); }
-    .status-unchecked::before { background: var(--fg-muted); }
 
     .output {
       min-height: 96px;
@@ -241,8 +192,19 @@ APP_CSS = """
     }
 
     /* Status list token: the three JWT segments, each on its own brand
-       colour, plus the decoded views underneath. */
-    #token-card { scroll-margin-top: calc(var(--topbar-height) + var(--space-4)); }
+       colour. The Token tab sets the encoded JWT beside its decoded header and
+       payload, as jwt.io does; narrow screens stack them. */
+    .jwt-columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-6);
+      align-items: start;
+    }
+    .jwt-columns > * { min-width: 0; }
+    .jwt-decoded pre { max-height: 360px; overflow: auto; }
+    @media (max-width: 900px) {
+      .jwt-columns { grid-template-columns: 1fr; }
+    }
     .jwt { font-size: var(--fs-sm); }
     .jwt-header { color: var(--brand-primary); font-weight: 600; }
     .jwt-payload { color: var(--brand-accent-vivid); font-weight: 600; }
@@ -252,29 +214,25 @@ APP_CSS = """
       display: flex;
       flex-wrap: wrap;
       gap: var(--space-2);
-      margin-bottom: var(--space-3);
     }
     .jwt-legend .badge { background: var(--bg-muted); }
     .jwt-legend .badge-dot { width: 8px; height: 8px; }
+    /* Icons in buttons (refresh, new) follow the label colour. */
+    .btn svg {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .btn-lg svg { width: 16px; height: 16px; }
     .legend-header { background: var(--brand-primary); }
     .legend-payload { background: var(--brand-accent-vivid); }
     .legend-signature { background: var(--credential); }
 
-    .subhead {
-      margin: var(--space-6) 0 var(--space-3);
-      padding-bottom: var(--space-2);
-      border-bottom: 1px solid var(--border);
-      font: 700 var(--fs-xl)/var(--lh-xl) var(--font-sans);
-      letter-spacing: -0.005em;
-    }
-    .subhead::after { content: ':'; }
-    .decoded-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    .decoded-grid > * { min-width: 0; }
-    .decoded-grid pre { max-height: 320px; overflow: auto; }
     .bitmap-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 48px;
@@ -417,68 +375,68 @@ APP_CSS = """
       color: var(--fg-subtle);
       word-break: break-word;
     }
-    .index-groups .eyebrow { margin-top: var(--space-3); }
-    .index-groups .eyebrow:first-child { margin-top: 0; }
+    .index-group + .index-group { margin-top: var(--space-3); }
+    .index-group-name {
+      margin-bottom: var(--space-1);
+      font-size: var(--fs-sm);
+      font-weight: 600;
+    }
 
-    /* Explorer: the pasted payload, its options, and the single-index lookup. */
-    .payload-input {
-      display: block;
-      width: 100%;
+    /* Explorer: the brand styles the payload textarea as a form-field control;
+       here it is taller and set in monospace for tokens. */
+    .form-field .payload-input {
       min-height: 160px;
-      padding: var(--space-3) var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
       font: var(--fs-sm)/1.5 var(--font-mono);
-      resize: vertical;
       word-break: break-all;
     }
-    .payload-input:focus,
-    .explorer-select:focus {
-      outline: none;
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px oklch(0.2955 0.1659 277.31 / 0.18);
+    .bits-segmented { max-width: 320px; }
+    /* A token without an encoded form to show (CWT, JSON) keeps one column. */
+    .jwt-columns-single { grid-template-columns: 1fr; }
+    /* The registry is the chooser: clicking a row opens that list's panel under
+       it. Rows top-align like the scoreboard and stay white; the chevron marks
+       the open one, and the usual hairline separates it from its panel. */
+    .registry-row { cursor: pointer; }
+    .registry-row td { vertical-align: top; }
+    .registry-row td.cell-mono { line-height: 20px; }
+    .registry-row:hover td { background: var(--bg-muted); }
+    .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+    /* The working-list panel opens as a detail row under the chosen list, the
+       way the scoreboard expands a pipeline, with no card of its own. Fixed
+       columns keep a long JWT or JSON line in it from stretching the table. */
+    .registry-table { table-layout: fixed; --toggle-col: 44px; }
+    .registry-table .col-toggle { width: var(--toggle-col); }
+    .registry-table .col-uuid { width: 330px; }
+    .registry-table .col-expiry { width: 120px; }
+    .registry-chevron {
+      display: block;
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      fill: none;
+      stroke: var(--brand-primary);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: transform 150ms ease-out;
     }
-    .explorer-fields {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0 var(--space-3);
-    }
-    @media (max-width: 560px) {
-      .explorer-fields { grid-template-columns: 1fr; }
-    }
-    .explorer-select {
-      width: 100%;
-      height: 36px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+    .registry-row[aria-expanded="true"] .registry-chevron { transform: rotate(180deg); }
+    /* The brand row hover (`.test-table tr:hover td`) would paint every cell of
+       the panel's own table while the pointer is over the detail row; the panel
+       stays white, its rows keep their own hover and revoked tint. The panel is
+       indented to line up with the List column. */
+    .test-table .registry-detail:hover td { background: transparent; }
+    .test-table .registry-detail > td,
+    .test-table .registry-detail:hover > td {
+      padding: var(--space-4) var(--space-3) var(--space-5) calc(var(--toggle-col) + var(--space-3));
       background: var(--bg);
-      color: var(--fg);
-      font: var(--fs-base) var(--font-sans);
     }
-    /* The status-list card decodes one list at a time: the picker names the
-       legacy credential list and every allocated country × doctype pool. */
-    .list-picker { display: flex; align-items: center; gap: var(--space-3); }
-    #lst-select {
-      height: 36px;
-      max-width: 340px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
-      font: var(--fs-sm) var(--font-sans);
+    .registry-detail .test-table tr:hover td { background: var(--bg-muted); }
+    .registry-detail .test-table tr.revoked td { background: var(--destructive-bg); }
+    @media (prefers-reduced-motion: reduce) {
+      .registry-chevron { transition: none; }
     }
-    .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
-    .index-lookup {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-3);
-    }
-    .index-lookup input[type="number"] { width: 160px; }
+    /* The explorer's index check answers as you type, its chip beside the field. */
+    .index-check-status { display: inline-flex; align-items: center; min-height: 44px; }
     .status-suspended { background: var(--warning-bg); color: var(--fg); }
     .status-suspended::before { background: var(--warning); }
 
@@ -525,11 +483,6 @@ APP_CSS = """
     .docs-frame .swagger-ui h3,
     .docs-frame .swagger-ui h4,
     .docs-frame .swagger-ui h5 { letter-spacing: normal; }
-
-    @media (max-width: 768px) {
-      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .decoded-grid { grid-template-columns: 1fr; }
-    }
 """
 
 _EXTRAS_TOP = f"""  <div class="extras-strip">
@@ -555,19 +508,20 @@ def _topbar(active: str) -> str:
         ("Console", "/"),
         ("Explorer", "/explorer"),
         ("API docs", "/docs"),
-        ("Status list API", "/token_status_list/take"),
+        ("TSL JWKS", "/.well-known/jwks.json"),
     )
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
             href=href,
             label=label,
-            current=' aria-current="page"' if label == active else "",
+            # The brand stylesheet marks the current page with `.nav-active`.
+            current=' class="nav-active" aria-current="page"' if label == active else "",
         )
         for label, href in links
     )
     return f"""  <nav class="topbar">
     <div class="topbar-inner">
-      <a class="topbar-logo" href="/"><img src="{LOGO_WORDMARK}" alt="Credimi"></a>
+      <a class="topbar-logo" href="/"><img src="{LOGO_MARK}" alt="Credimi"><span class="topbar-title">Token status list</span></a>
       <ul class="topbar-nav">
 {items}
       </ul>
@@ -585,10 +539,10 @@ _FOOTER = f"""  <footer class="footer">
         </div>
         <div class="footer-links">
           <div class="footer-col">
-            <a href="/token_status_list/take">Status list API</a>
+            <a href="{TAKE_DOCS_HREF}">Status list API</a>
             <a href="/status/1">Legacy status list token</a>
             <a href="/token_status_list/aggregation">Status list aggregation</a>
-            <a href="/.well-known/jwks.json">JWKS</a>
+            <a href="/.well-known/jwks.json">TSL JWKS</a>
             <a href="/docs">API docs</a>
             <a href="https://github.com/ForkbombEu/capture-status-list"
                target="_blank" rel="noopener">Repository</a>
@@ -637,236 +591,198 @@ def page(
 </html>"""
 
 
-_CONSOLE_BODY = """  <header class="hero">
+def _section_intro(level: int, title_id: str, title: str, description: str = "") -> str:
+    """A section intro (DESIGN.md §8): the title row, then an optional description."""
+    paragraph = (
+        f"""
+      <div class="section-intro-description"><p>{description}</p></div>"""
+        if description
+        else ""
+    )
+    return f"""    <header class="section-intro">
+      <div class="section-intro-heading">
+        <h{level} class="section-intro-title" id="{title_id}">{title}</h{level}>
+      </div>{paragraph}
+    </header>"""
+
+
+def _hero_band(title: str, description: str) -> str:
+    """The indigo band every page opens with (DESIGN.md §8), titled `#page-title`."""
+    return f"""  <section class="hero-band" aria-labelledby="page-title">
     <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>Token status list console</h1>
-        <p>Create test credentials, revoke selected entries, and verify them against the
-        signed Status List Token. The registry debugger below exposes paired country × doctype
-        Token Status Lists and ISO 18013-5 identifier lists in JWT and CWT forms.</p>
+{_section_intro(1, "page-title", title, description)}
     </div>
-  </header>
-  <main class="page-content">
+  </section>"""
+
+
+# The one alert every page reports failures and hints in (DESIGN.md §11
+# Alerts); the shared script's notify() fills and shows it.
+_NOTICE = """
+      <div id="notice" class="alert alert-floating" role="alert" hidden>
+        <svg class="alert-icon" data-kind="destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg class="alert-icon" data-kind="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <div>
+          <p class="alert-title" id="notice-title"></p>
+          <p class="alert-body" id="notice-body"></p>
+        </div>
+        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+      </div>
+"""
+
+
+_CONSOLE_BODY = (
+    _hero_band(
+        "Token status list console",
+        "A test server for EUDI Wallet conformance: IETF Token Status Lists per country"
+        " and doctype, in JWT and CWT, each paired with an ISO 18013-5 identifier list.",
+    )
+    + """
+  <main>
+    <section class="page-section" aria-labelledby="console-title">
     <div class="container">
-    <div class="console-grid">
-      <div class="stack console-left">
-      <section class="card" id="registry-card">
-        <div class="section-header">
-          <h2>Country × doctype lists <span id="registry-count" class="count-chip">0</span></h2>
-          <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
-        </div>
-        <p class="text-sm text-muted">Paired Token Status List and ISO 18013-5 identifier-list resources. Choose the list to operate on: every panel below then belongs to that list, and the console never mixes the legacy <span class="mono">/status/1</span> credential list with an allocated country × doctype pool.</p>
-        <div class="list-picker mt-4">
-          <label class="field-label" for="lst-select">Operate on</label>
-          <select id="lst-select" aria-label="Status list to operate on"></select>
-          <button id="new-list-toggle" class="btn btn-sm btn-success" aria-expanded="false" aria-controls="new-list-form">New status list</button>
-        </div>
-        <p class="text-sm text-muted mt-4" id="ctx-scope"></p>
-        <div id="new-list-form" class="mt-4" hidden>
-          <div class="batch-fields">
-            <div>
-              <label class="field-label" for="new-country">Country</label>
-              <input id="new-country" type="text" value="EU" maxlength="16">
-            </div>
-            <div>
-              <label class="field-label" for="new-doctype">Doctype</label>
-              <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-            </div>
-            <div>
-              <label class="field-label" for="new-expiry">List expiry</label>
-              <input id="new-expiry" type="date" value="2099-12-31">
-            </div>
-          </div>
-          <div class="btn-row mt-4">
-            <button id="new-list" class="btn btn-md btn-success">Create status list</button>
-            <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
-          </div>
-        </div>
-        <div class="test-table-wrap mt-4">
-          <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
+"""
+    + _section_intro(
+        2,
+        "console-title",
+        "Browse the status lists",
+        "Pick a list to add or revoke entries, read its signed token, and check the key"
+        " that signs it.",
+    )
+    + """
+    <div class="stack">
+      <div id="registry">
+        <div class="test-table-wrap">
+          <table class="test-table registry-table">
+            <thead><tr><th class="col-toggle"></th><th>List</th><th class="col-uuid">List UUID</th><th class="col-expiry">Expiry</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
-      </section>
-
-      <section class="card batch-card" id="legacy-card" hidden>
-        <div class="section-header">
-          <h2>Credentials <span id="row-count" class="count-chip">0</span></h2>
-          <div class="btn-row">
-            <button id="refresh" class="btn btn-sm btn-outline">Refresh</button>
-            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
-            <button id="token" class="btn btn-sm btn-outline">Fetch status list token</button>
+        <div class="btn-row mt-4">
+          <button id="registry-refresh" class="btn btn-lg btn-outline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Refresh lists</button>
+          <button id="new-list-toggle" class="btn btn-lg btn-primary" aria-expanded="false" aria-controls="new-list-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New status list</button>
+        </div>
+        <div id="new-list-form" class="mt-4" hidden>
+          <div class="form-row">
+            <label class="form-field form-field-sm">
+              <span class="subsection-heading">Country</span>
+              <input id="new-country" type="text" value="EU" maxlength="16">
+            </label>
+            <label class="form-field form-field-grow">
+              <span class="subsection-heading">Doctype</span>
+              <input id="new-doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
+            </label>
+            <label class="form-field form-field-md">
+              <span class="subsection-heading">List expiry</span>
+              <input id="new-expiry" type="date" value="2099-12-31">
+            </label>
+            <button id="new-list-cancel" class="btn btn-lg btn-outline" type="button">Cancel</button>
+            <button id="new-list" class="btn btn-lg btn-primary" type="button">Create</button>
           </div>
         </div>
-        <p class="text-sm text-muted">Credentials and their verification belong to the legacy <span class="mono">/status/1</span> list. A batch adds credentials here and allocates each one a paired country × doctype entry.</p>
-        <div class="batch-fields">
-          <div>
-            <label class="field-label" for="count">Count</label>
-            <input id="count" type="number" min="1" max="500" value="10">
-          </div>
-          <div>
-            <label class="field-label" for="prefix">Credential prefix</label>
-            <input id="prefix" type="text" value="cred">
-          </div>
-          <div>
-            <label class="field-label" for="country">Country</label>
-            <input id="country" type="text" value="EU" maxlength="16">
-          </div>
-          <div>
-            <label class="field-label" for="doctype">Doctype</label>
-            <input id="doctype" type="text" value="org.iso.18013.5.1.mDL" maxlength="128">
-          </div>
-          <div>
-            <label class="field-label" for="expiry-date">List expiry</label>
-            <input id="expiry-date" type="date" value="2099-12-31">
-          </div>
-        </div>
-        <div class="btn-row mt-4 mb-4">
-          <button id="create" class="btn btn-md btn-primary">Create random batch</button>
-        </div>
-        <div class="btn-row mb-4">
-          <button id="all" class="btn btn-sm btn-outline">Select all</button>
-          <button id="none" class="btn btn-sm btn-outline">Select none</button>
-          <button id="verify" class="btn btn-sm btn-secondary">Verify selected</button>
-          <button id="revoke" class="btn btn-sm btn-destructive">Revoke selected</button>
-        </div>
-        <div class="credential-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead>
-                <tr>
-                  <th><span class="text-xs">Pick</span></th>
-                  <th>Credential</th>
-                  <th>Index</th>
-                  <th>Status</th>
-                  <th>Verification</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="card" id="allocation-card" hidden>
-        <div class="section-header">
-          <h2>Known allocated status-list entries <span id="allocation-count" class="count-chip">0</span></h2>
-        </div>
-        <p class="text-sm text-muted">Entries of the working list. They identify a country, doctype, list and index, but carry no credential identifier: these pools are allocated through the status-list API, not through the credential console.</p>
-        <div class="batch-fields">
-          <div>
-            <label class="field-label" for="entries-count">Count</label>
-            <input id="entries-count" type="number" min="1" max="500" value="10">
-          </div>
-          <div>
-            <label class="field-label" for="entries-expiry">List expiry</label>
-            <input id="entries-expiry" type="date" value="2099-12-31">
-          </div>
-        </div>
-        <div class="btn-row mt-4 mb-4">
-          <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
-        </div>
-        <div class="credential-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead><tr><th>Country</th><th>Doctype</th><th>Index</th><th>Expiry</th><th>Status</th><th>Status list URI</th><th>Actions</th></tr></thead>
-              <tbody id="allocation-rows"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
       </div>
 
-      <aside class="stack console-right" aria-label="Results panel">
-        <section class="card">
-          <div class="section-header"><h2>Output</h2></div>
-          <pre class="output" id="out">Ready</pre>
-        </section>
-
-      <section class="card" id="token-card" hidden>
-        <div class="section-header">
-          <h2>Status list token</h2>
-          <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
-        </div>
-        <p class="text-sm text-muted" id="lst-scope"></p>
-        <p class="jwt-legend">
-          <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
-          <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
-          <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
-        </p>
-        <pre class="output jwt" id="jwt"></pre>
-
-        <h3 class="subhead">Decoded token</h3>
-        <div class="decoded-grid">
-          <div>
-            <p class="eyebrow">Header</p>
-            <pre id="jwt-header"></pre>
-          </div>
-          <div>
-            <p class="eyebrow">Payload</p>
-            <pre id="jwt-payload"></pre>
-            <p class="lst-note" id="lst-note"></p>
-          </div>
+      <section id="working-card" aria-label="Selected status list" hidden>
+        <div class="tabs" role="tablist" id="working-tabs" aria-label="Working list views">
+          <button class="tab-btn active" type="button" role="tab" id="tab-entries" data-tab="entries" aria-selected="true" aria-controls="entries-panel">Entries <span id="allocation-count" class="count-chip">0</span></button>
+          <button class="tab-btn" type="button" role="tab" id="tab-token" data-tab="token" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
+          <button class="tab-btn" type="button" role="tab" id="tab-decoded" data-tab="decoded" aria-selected="false" aria-controls="decoded-panel" tabindex="-1">Decoded status list</button>
         </div>
 
-        <h3 class="subhead">Status list</h3>
-        <div class="metric-grid">
-          <div class="card">
-            <strong class="metric-value" id="lst-bits">0</strong>
-            <span class="eyebrow">Bits per entry</span>
+        <div role="tabpanel" id="entries-panel" aria-labelledby="tab-entries">
+          <div class="entries-scroll">
+            <div class="test-table-wrap">
+              <table class="test-table">
+                <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="allocation-rows"></tbody>
+              </table>
+            </div>
           </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-size">0</strong>
-            <span class="eyebrow">Entries</span>
+          <div class="btn-row mt-4">
+            <button id="add-entries-toggle" class="btn btn-lg btn-outline" type="button" aria-expanded="false" aria-controls="add-entries-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add entries</button>
           </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-valid">0</strong>
-            <span class="eyebrow">Valid</span>
-          </div>
-          <div class="card">
-            <strong class="metric-value" id="lst-revoked">0</strong>
-            <span class="eyebrow">Revoked</span>
-          </div>
-        </div>
-        <p class="eyebrow mt-4">Inflated lst spectrum</p>
-        <div class="bitmap-shell">
-          <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
-            <div class="bitmap" id="lst-bitmap"></div>
-          </div>
-          <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
-            <div class="bitmap-minimap" id="lst-minimap"></div>
-          </div>
-        </div>
-        <p class="bitmap-caption" id="lst-caption"></p>
-        <p class="eyebrow mt-4">Revoked indices</p>
-        <p class="index-list" id="lst-indices">None</p>
-        <div class="decoded-credentials-scroll">
-          <div class="test-table-wrap">
-            <table class="test-table">
-              <thead>
-                <tr>
-                  <th>Credential</th>
-                  <th>Index</th>
-                  <th>Decoded status</th>
-                </tr>
-              </thead>
-              <tbody id="lst-rows"></tbody>
-            </table>
+          <div id="add-entries-form" class="mt-4" hidden>
+            <div class="form-row">
+              <label class="form-field form-field-sm">
+                <span class="subsection-heading">Count</span>
+                <input id="entries-count" type="number" min="1" max="500" value="10">
+              </label>
+              <label class="form-field form-field-md">
+                <span class="subsection-heading">Entry expiry</span>
+                <input id="entries-expiry" type="date" value="2099-12-31">
+              </label>
+              <button id="add-entries-cancel" class="btn btn-lg btn-outline" type="button">Cancel</button>
+              <button id="add-entries" class="btn btn-lg btn-primary" type="button">Add</button>
+            </div>
           </div>
         </div>
-        <div class="btn-row mt-4" id="assignment-pagination"></div>
 
-        <h3 class="subhead">Signing key</h3>
-        <p class="eyebrow" id="jwks-label">JWKS · /.well-known/jwks.json</p>
-        <pre id="jwks"></pre>
+        <div role="tabpanel" id="token-panel" aria-labelledby="tab-token" hidden>
+          <div class="jwt-columns">
+            <div>
+              <p class="eyebrow">Encoded</p>
+              <pre class="output jwt" id="jwt"></pre>
+              <div class="flex-between gap-3 mt-4">
+                <p class="jwt-legend">
+                  <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
+                  <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
+                  <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
+                </p>
+                <button id="copy-token" class="btn btn-sm btn-outline">Copy the JWT</button>
+              </div>
+            </div>
+            <div class="jwt-decoded">
+              <p class="eyebrow">Decoded header</p>
+              <pre id="jwt-header"></pre>
+              <p class="eyebrow mt-4">Decoded payload</p>
+              <pre id="jwt-payload"></pre>
+              <p class="lst-note" id="lst-note"></p>
+            </div>
+          </div>
+        </div>
+
+        <div role="tabpanel" id="decoded-panel" aria-labelledby="tab-decoded" hidden>
+          <div class="metric-grid">
+            <div class="card">
+              <strong class="metric-value" id="lst-bits">0</strong>
+              <span class="eyebrow">Bits per entry</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-size">0</strong>
+              <span class="eyebrow">Entries</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-valid">0</strong>
+              <span class="eyebrow">Valid</span>
+            </div>
+            <div class="card">
+              <strong class="metric-value" id="lst-revoked">0</strong>
+              <span class="eyebrow">Revoked</span>
+            </div>
+          </div>
+          <p class="eyebrow mt-4">Inflated lst spectrum</p>
+          <div class="bitmap-shell">
+            <div class="bitmap-scroll" id="lst-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
+              <div class="bitmap" id="lst-bitmap"></div>
+            </div>
+            <div class="bitmap-minimap-scroll" id="lst-minimap-scroll" tabindex="0" aria-label="Revoked-entry minimap">
+              <div class="bitmap-minimap" id="lst-minimap"></div>
+            </div>
+          </div>
+          <p class="bitmap-caption" id="lst-caption"></p>
+          <p class="eyebrow mt-4">Revoked indices</p>
+          <p class="index-list" id="lst-indices">None</p>
+        </div>
       </section>
 
-      </aside>
+"""
+    + _NOTICE
+    + """
+
     </div>
     </div>
+    </section>
   </main>"""
+)
 
 
 # Helpers shared by the console and the explorer: HTML escaping, the styled
@@ -885,6 +801,99 @@ _SHARED_SCRIPT = """<script>
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
+    }
+
+    // Status values arrive in caps (VALID, REVOKED); chips show them in sentence
+    // case, since DESIGN.md §3 keeps uppercase for eyebrow labels only.
+    function statusLabel(value) {
+      return value.charAt(0) + value.slice(1).toLowerCase();
+    }
+
+    // Failures and hints float in the page's one alert until dismissed or until
+    // the next action starts; successful actions show their result in the page.
+    const notice = document.querySelector("#notice");
+
+    function describe(value) {
+      if (typeof value === "string") return value;
+      if (value instanceof Error) return value.message;
+      if (value && typeof value.detail === "string") return value.detail;
+      return JSON.stringify(value, null, 2);
+    }
+
+    function notify(value, kind = "destructive", title = kind === "info" ? "Nothing selected" : "The action failed") {
+      notice.className = `alert alert-floating alert-${kind}`;
+      // Only this kind's icon shows; SVG elements have no .hidden property.
+      notice.querySelectorAll(".alert-icon").forEach((icon) => icon.toggleAttribute("hidden", icon.dataset.kind !== kind));
+      document.querySelector("#notice-title").textContent = title;
+      document.querySelector("#notice-body").textContent = describe(value);
+      notice.hidden = false;
+    }
+    document.querySelector("#notice-dismiss").onclick = () => { notice.hidden = true; };
+
+    // Every action reports failures in the alert: an unhandled rejection would
+    // leave the page stale with no explanation.
+    async function guard(action) {
+      notice.hidden = true;
+      try {
+        await action();
+      } catch (error) {
+        notify(error);
+      }
+    }
+
+    async function jsonFetch(url, options = {}) {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { "content-type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      const type = response.headers.get("content-type") || "";
+      const body = type.includes("application/json") ? await response.json() : await response.text();
+      if (!response.ok) throw body;
+      return body;
+    }
+
+    // Tabs (the WAI-ARIA pattern): one panel shows at a time and arrow keys move
+    // between tabs. Returns the function that shows a tab by its data-tab name.
+    function setupTabs(tablist) {
+      const tabs = [...tablist.querySelectorAll("[role=tab]")];
+      function showTab(name) {
+        for (const tab of tabs) {
+          const active = tab.dataset.tab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+          const panel = document.getElementById(tab.getAttribute("aria-controls"));
+          panel.hidden = !active;
+          // A bitmap laid out while its tab was hidden measured nothing; a
+          // scroll event makes it re-measure its minimap viewport now it shows.
+          if (active) {
+            panel.querySelectorAll(".bitmap-scroll").forEach((scroll) => scroll.dispatchEvent(new Event("scroll")));
+          }
+        }
+      }
+      tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
+      tablist.onkeydown = (event) => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!step) return;
+        const visible = tabs.filter((tab) => !tab.hidden);
+        const index = visible.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+        const next = visible[(index + step + visible.length) % visible.length];
+        showTab(next.dataset.tab);
+        next.focus();
+      };
+      return showTab;
+    }
+
+    // A JWT as its three segments, each in its own brand colour.
+    function renderJwt(target, token) {
+      const [header, payload, signature] = token.split(".");
+      target.innerHTML =
+        `<span class="jwt-header">${escapeHtml(header)}</span>` +
+        `<span class="jwt-dot">.</span>` +
+        `<span class="jwt-payload">${escapeHtml(payload)}</span>` +
+        `<span class="jwt-dot">.</span>` +
+        `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
     }
 
     const ROW_ENTRIES = 64;
@@ -979,146 +988,99 @@ _SHARED_SCRIPT = """<script>
 
 
 _CONSOLE_SCRIPT = """<script>
-    const rows = document.querySelector("#rows");
     const registryRows = document.querySelector("#registry-rows");
-    const registryCount = document.querySelector("#registry-count");
     const allocationRows = document.querySelector("#allocation-rows");
     const allocationCount = document.querySelector("#allocation-count");
-    const out = document.querySelector("#out");
-    const rowCount = document.querySelector("#row-count");
-    let credentials = [];
-    let verification = {};
+    const workingCard = document.querySelector("#working-card");
+    // Where the panel rests while no list is open; re-rendering the rows parks
+    // it here first, so it is never detached from the document.
+    const workingCardHome = workingCard.parentElement;
+    const jwtBox = document.querySelector("#jwt");
+    const copyButton = document.querySelector("#copy-token");
     let allocations = [];
     let registry = [];
+    let currentToken = "";
+    // The working list the whole console is scoped to: null until the
+    // operator clicks a list in the registry.
+    let activeListUri = null;
 
-    function selectedIds() {
-      return [...document.querySelectorAll("tbody input:checked")]
-        .map((box) => credentials[Number(box.value)]?.credential_id)
-        .filter(Boolean);
+    function workingPool() {
+      return registry.find((item) => item.status_list_uri === activeListUri) || null;
     }
 
-    function write(value) {
-      out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    // Dates read DD/MM/YYYY (DESIGN.md §15).
+    function formatDate(iso) {
+      return iso ? iso.split("-").reverse().join("/") : "—";
     }
 
-    // Every dashboard fetch reports failures in Output: an unhandled rejection
-    // would leave the operator with a stale table and no explanation.
-    async function guard(action) {
-      try {
-        await action();
-      } catch (error) {
-        write(error);
-      }
-    }
-
-    async function jsonFetch(url, options = {}) {
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: { "content-type": "application/json", ...(options.headers || {}) },
-        ...options,
-      });
-      const type = response.headers.get("content-type") || "";
-      const body = type.includes("application/json") ? await response.json() : await response.text();
-      if (!response.ok) throw body;
-      return body;
-    }
-
-    let visibleRows = 100;
-
-    function render() {
-      const selectedIndexes = new Set([...document.querySelectorAll("tbody input:checked")].map((box) => box.value));
-      rowCount.textContent = credentials.length;
-
-      if (!credentials.length) {
-        rows.innerHTML = `<tr class="empty-row"><td colspan="5">No credentials yet. Create a random batch to start.</td></tr>`;
-        return;
-      }
-
-      const shown = credentials.slice(0, visibleRows);
-      rows.innerHTML = shown.map((item, index) => {
-        const safeCredentialId = escapeHtml(item.credential_id);
-        const checked = selectedIndexes.has(String(index)) ? "checked" : "";
-        const key = item.credential_id;
-        const state = item.status.toLowerCase();
-        const result = verification[key]
-          ? `<span class="status-chip status-${escapeHtml(verification[key].result.toLowerCase())}">${escapeHtml(verification[key].result)} · ${escapeHtml(verification[key].status)}</span>`
-          : `<span class="status-chip status-unchecked">Not verified</span>`;
-        return `<tr class="${state}">
-          <td class="cell-select"><input type="checkbox" value="${index}" ${checked} aria-label="Select ${safeCredentialId}"></td>
-          <td class="cell-mono">${safeCredentialId}</td>
-          <td class="cell-mono">${item.idx}</td>
-          <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
-          <td>${result}</td>
-        </tr>`;
-      }).join("") + (visibleRows < credentials.length
-        ? `<tr class="show-more-row"><td colspan="5">
-            <button id="show-more" class="btn btn-sm btn-outline" type="button">Show more (${visibleRows} of ${credentials.length})</button>
-          </td></tr>`
-        : "");
-      const showMore = document.querySelector("#show-more");
-      if (showMore) showMore.onclick = () => {
-        visibleRows = Math.min(credentials.length, visibleRows + 200);
-        render();
-      };
-    }
-
+    // The Entries tab is the working list's own inventory.
     function renderAllocations() {
-      // The table is the working list's own inventory: a legacy context has no
-      // allocated entries, a pool context shows exactly that pool's entries.
-      const entries = activeListUri
-        ? allocations.filter((item) => item.status_list_uri === activeListUri)
-        : [];
+      const entries = allocations.filter((item) => item.status_list_uri === activeListUri);
       allocationCount.textContent = entries.length;
       allocationRows.innerHTML = entries.length
         ? entries.map((item) => {
-            const status = escapeHtml(item.status);
+            const state = escapeHtml(item.status.toLowerCase());
             const revoked = item.status === "REVOKED";
-            return `<tr class="${escapeHtml(item.status.toLowerCase())}">
-              <td class="cell-mono">${escapeHtml(item.country)}</td>
-              <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            return `<tr class="${state}">
               <td class="cell-mono">${item.idx}</td>
-              <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
-              <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${status}</span></td>
-              <td class="cell-mono">${escapeHtml(item.status_list_uri)}</td>
+              <td class="cell-mono">${escapeHtml(formatDate(item.expiry_date))}</td>
+              <td><span class="status-chip status-${state}">${escapeHtml(statusLabel(item.status))}</span></td>
               <td>
-                <div class="btn-row">
-                  <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke ${escapeHtml(item.country)} ${escapeHtml(item.doctype)} entry ${item.idx}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button>
-                </div>
+                <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke entry ${item.idx}" ${revoked ? "disabled" : ""}>Revoke</button>
               </td>
             </tr>`;
           }).join("")
-        : `<tr class="empty-row"><td colspan="7">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="4">No entry of this list is allocated yet. Entries appear here as the status-list API hands them out.</td></tr>`;
       allocationRows.querySelectorAll("button[data-allocation-uri]").forEach((button) => {
         button.onclick = () => guard(async () => {
-          const data = await jsonFetch("/dashboard/allocated-entries/revoke", {
+          await jsonFetch("/dashboard/allocated-entries/revoke", {
             method: "POST",
             body: JSON.stringify({
               status_list_uri: button.dataset.allocationUri,
               idx: Number(button.dataset.allocationIdx),
             }),
           });
-          write(data);
           await load();
           await refreshCard();
         });
       });
     }
 
-    // The registry renders the list summaries: inventory only, the picker chooses.
-
-    function renderRegistry(summaries) {
-      registryCount.textContent = summaries.length;
-      // Pure inventory: the picker above chooses the list to operate on.
-      registryRows.innerHTML = summaries.length
-        ? summaries.map((item) => `<tr>
-            <td class="cell-mono">${escapeHtml(item.country)}</td>
-            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+    // The registry is both the inventory and the chooser: clicking a row opens
+    // that list's panel underneath it; clicking the open row closes it.
+    function renderRegistry() {
+      workingCardHome.append(workingCard);
+      registryRows.innerHTML = registry.length
+        ? registry.map((item) => {
+            const open = item.status_list_uri === activeListUri;
+            return `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}" aria-expanded="${open}"${open ? ' aria-current="true"' : ""}>
+            <td><svg class="registry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></td>
+            <td>
+              <a class="list-name" href="${escapeHtml(item.status_list_uri)}" target="_blank" rel="noreferrer" title="Open this list's token in a new tab">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)}</a>
+              <span class="list-meta"><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "Expired" : "Active"}</span><span class="font-mono">${item.allocated} allocated · ${item.revoked} revoked</span></span>
+            </td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
-            <td>${item.allocated}</td><td>${item.revoked}</td>
-            <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
-            <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
+            <td class="cell-mono">${escapeHtml(formatDate(item.expires))}</td>
+          </tr>`;
+          }).join("")
+        : `<tr class="empty-row"><td colspan="4">No country × doctype list allocated yet.</td></tr>`;
+      const openRow = registryRows.querySelector('tr[aria-current="true"]');
+      if (!openRow) return;
+      const detail = document.createElement("tr");
+      detail.className = "registry-detail";
+      const cell = document.createElement("td");
+      cell.colSpan = 4;
+      cell.append(workingCard);
+      detail.append(cell);
+      openRow.after(detail);
+    }
+
+    // The working-list panel follows the chosen list.
+    function renderContext() {
+      const pool = workingPool();
+      workingCard.hidden = !pool;
+      renderRegistry();
+      renderAllocations();
     }
 
     async function load() {
@@ -1126,75 +1088,104 @@ _CONSOLE_SCRIPT = """<script>
         jsonFetch("/credentials"),
         jsonFetch("/debug/status-lists"),
       ]);
-      credentials = data.credentials;
       allocations = data.allocated_entries;
       registry = summaries;
-      verification = Object.fromEntries(
-        credentials
-          .filter((item) => item.verification_result)
-          .map((item) => [item.credential_id, { result: item.verification_result, status: item.status }])
-      );
-      renderRegistry(registry);
-      renderListOptions(registry);
-      if (
-        contextChosen &&
-        activeListUri &&
-        !registry.some((item) => item.status_list_uri === activeListUri)
-      ) {
-        clearList();           // the pool is gone: state was reset or the server reloaded
-        return;
-      }
-      listSelect.value = contextChosen ? activeListUri || "legacy" : "none";
-      renderPanels();
+      // A list that disappears (state reset, server restart) drops the console
+      // back to the unselected view.
+      if (activeListUri && !workingPool()) activeListUri = null;
       renderContext();
-      render();
     }
 
-    // The credentials panel owns the credential batch: /status/1 credentials,
-    // each one paired with an entry in the country × doctype pool of the form.
-    document.querySelector("#create").onclick = () => guard(async () => {
-      const data = await jsonFetch("/credentials/random-batch", {
-        method: "POST",
-        body: JSON.stringify({
-          count: Number(document.querySelector("#count").value || 10),
-          prefix: document.querySelector("#prefix").value || "cred",
-          country: document.querySelector("#country").value || "EU",
-          doctype: document.querySelector("#doctype").value || "org.iso.18013.5.1.mDL",
-          expiry_date: document.querySelector("#expiry-date").value || "2099-12-31",
-        }),
-      });
-      write(data);
-      await load();
-      await refreshCard();
-    });
+    async function showCard(uri) {
+      renderDecodedToken(await jsonFetch(`/debug/status-list?${new URLSearchParams({ uri })}`));
+    }
 
-    // The allocated-entry panel owns its pool's top-up: entries only.
+    async function refreshCard() {
+      if (activeListUri) await showCard(activeListUri);
+    }
+
+    // The single context switch: pick a list, then read its signed token.
+    async function selectList(uri) {
+      if (uri !== activeListUri) {
+        showTab("entries");
+        showAddEntriesForm(false);
+      }
+      activeListUri = uri;
+      renderContext();
+      await showCard(uri);
+    }
+
+    // The working-list views: one tab visible at a time keeps the page short.
+    const showTab = setupTabs(document.querySelector("#working-tabs"));
+
+    function chooseRow(event) {
+      if (event.target.closest("a")) return;  // the list name opens its URI instead
+      const row = event.target.closest("tr[data-list]");
+      if (!row) return;
+      const uri = row.dataset.list;
+      guard(async () => {
+        if (uri === activeListUri) {
+          activeListUri = null;      // the open row closes its panel
+          renderContext();
+        } else {
+          await selectList(uri);
+        }
+        // Re-rendering the registry drops focus; keyboard users keep their row.
+        if (event.type === "keydown") registryRows.querySelector(`tr[data-list="${CSS.escape(uri)}"]`)?.focus();
+      });
+    }
+    registryRows.onclick = chooseRow;
+    // Only a focused row reacts to Enter and Space: the open panel lives in the
+    // same table body, and its inputs and buttons keep their own keys.
+    registryRows.onkeydown = (event) => {
+      if (!event.target.matches("tr[data-list]")) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      chooseRow(event);
+    };
+
+    // A button that opens the form under it on demand, so the tables come
+    // first: `New status list` under the lists, `Add entries` under the entries.
+    function revealer(toggle, form, firstField) {
+      const show = (visible) => {
+        form.hidden = !visible;
+        toggle.setAttribute("aria-expanded", String(visible));
+        if (visible) firstField.focus();
+      };
+      toggle.onclick = () => show(form.hidden);
+      return show;
+    }
+
+    const showAddEntriesForm = revealer(
+      document.querySelector("#add-entries-toggle"),
+      document.querySelector("#add-entries-form"),
+      document.querySelector("#entries-count"),
+    );
+    document.querySelector("#add-entries-cancel").onclick = () => showAddEntriesForm(false);
+
+    // Top-up of the working list: entries land in this list only, or the
+    // server refuses them (a full list is never rolled over into another).
     document.querySelector("#add-entries").onclick = () => guard(async () => {
       const pool = workingPool();
-      if (!pool) return write("Operate on an allocated pool first.");
-      const data = await jsonFetch("/dashboard/status-lists", {
+      if (!pool) return notify("Click a country × doctype list first.", "info");
+      await jsonFetch("/dashboard/status-lists/entries", {
         method: "POST",
         body: JSON.stringify({
-          country: pool.country,
-          doctype: pool.doctype,
+          status_list_uri: pool.status_list_uri,
           expiry_date: document.querySelector("#entries-expiry").value || pool.expires,
           count: Number(document.querySelector("#entries-count").value || 10),
         }),
       });
-      write(data);
+      showAddEntriesForm(false);
       await load();
       await refreshCard();
     });
 
-    const newListForm = document.querySelector("#new-list-form");
-    const newListToggle = document.querySelector("#new-list-toggle");
-    function showNewListForm(visible) {
-      newListForm.hidden = !visible;
-      newListToggle.setAttribute("aria-expanded", String(visible));
-      if (visible) document.querySelector("#new-country").focus();
-    }
-
-    newListToggle.onclick = () => showNewListForm(newListForm.hidden);
+    const showNewListForm = revealer(
+      document.querySelector("#new-list-toggle"),
+      document.querySelector("#new-list-form"),
+      document.querySelector("#new-country"),
+    );
     document.querySelector("#new-list-cancel").onclick = () => showNewListForm(false);
 
     document.querySelector("#new-list").onclick = () => guard(async () => {
@@ -1207,209 +1198,18 @@ _CONSOLE_SCRIPT = """<script>
           count: 1,
         }),
       });
-      write(data);
       showNewListForm(false);
       await load();
       await selectList(data.status_list_uri);
     });
 
-    document.querySelector("#revoke").onclick = () => guard(async () => {
-      const ids = selectedIds();
-      if (!ids.length) return write("Select credentials first.");
-      const data = await jsonFetch("/credentials/revoke-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      write(data);
-      await load();
-      await refreshCard();
-    });
-
-    document.querySelector("#verify").onclick = () => guard(async () => {
-      const ids = selectedIds();
-      if (!ids.length) return write("Select credentials first.");
-      const data = await jsonFetch("/verify-batch", {
-        method: "POST",
-        body: JSON.stringify({ credential_ids: ids }),
-      });
-      for (const item of data.verified || []) {
-        verification[item.credential_id] = { result: item.result, status: item.status };
-      }
-      write(data);
-      render();
-      await refreshCard();
-    });
-
-    document.querySelector("#refresh").onclick = () => guard(load);
     document.querySelector("#registry-refresh").onclick = () => guard(load);
-    document.querySelector("#all").onclick = () => {
-      visibleRows = credentials.length;
-      render();
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = true; });
-    };
-    document.querySelector("#none").onclick = () => {
-      document.querySelectorAll("tbody input").forEach((box) => { box.checked = false; });
-    };
-    const tokenCard = document.querySelector("#token-card");
-    const registryCard = document.querySelector("#registry-card");
-    const legacyCard = document.querySelector("#legacy-card");
-    const allocationCard = document.querySelector("#allocation-card");
-    const jwtBox = document.querySelector("#jwt");
-    const copyButton = document.querySelector("#copy-token");
-    const listSelect = document.querySelector("#lst-select");
-    let currentToken = "";
 
-    // The working list the whole console is scoped to. Nothing is selected
-    // until the operator picks one; null then means the legacy /status/1 list.
-    let activeListUri = null;
-    let contextChosen = false;
-
-    // Option labels carry the revoked count: the operator sees at a glance
-    // which of the registered lists the revocation landed in.
-    function renderListOptions(summaries) {
-      listSelect.innerHTML = [
-        '<option value="none">Pick a status list…</option>',
-        '<option value="legacy">Legacy /status/1 · credential list</option>',
-        ...summaries.map((item) => `<option value="${escapeHtml(item.status_list_uri)}">` +
-          `${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ` +
-          `${escapeHtml(item.list_id.slice(0, 8))} · ${item.revoked} revoked</option>`),
-      ].join("");
-    }
-
-    function statusListUrl(uri, offset, limit) {
-      const params = new URLSearchParams({
-        assignment_offset: String(offset),
-        assignment_limit: String(limit),
-      });
-      if (uri) params.set("uri", uri);
-      return `/debug/status-list?${params}`;
-    }
-
-    // Decoding never changes the working list: the card always shows it.
-    async function showCard(uri, offset = 0, limit = 100) {
-      const data = await jsonFetch(statusListUrl(uri, offset, limit));
-      renderDecodedToken(data);
-      return data;
-    }
-
-    async function refreshCard() {
-      if (!contextChosen || tokenCard.hidden) return;
-      await showCard(activeListUri);
-    }
-
-    function contextLabel() {
-      return activeListUri || "the legacy /status/1 list";
-    }
-
-    // The registry stays on screen: it is both the inventory and the chooser.
-    // The other panels follow the chosen list, one kind at a time.
-    function renderPanels() {
-      const pool = Boolean(activeListUri);
-      legacyCard.hidden = !contextChosen || pool;
-      allocationCard.hidden = !contextChosen || !pool;
-    }
-
-    function workingPool() {
-      return registry.find((item) => item.status_list_uri === activeListUri) || null;
-    }
-
-    function renderContext() {
-      const pool = registry.find((item) => item.status_list_uri === activeListUri);
-      document.querySelector("#ctx-scope").textContent = !contextChosen
-        ? "No list selected yet: choose one above to operate on it."
-        : activeListUri
-          ? `Working on ${activeListUri} — ${pool.allocated} allocated, ${pool.revoked} revoked, ${pool.expired ? "expired" : "active"}.`
-          : "Working on the legacy /status/1 credential list.";
-      renderAllocations();
-    }
-
-    // The single context switch: pick a list, then read its signed token.
-    async function selectList(uri) {
-      contextChosen = true;
-      activeListUri = uri;
-      listSelect.value = uri || "legacy";
-      renderPanels();
-      renderContext();
-      await showCard(uri);
-    }
-
-    function clearList() {
-      contextChosen = false;
-      activeListUri = null;
-      listSelect.value = "none";
-      tokenCard.hidden = true;
-      renderPanels();
-      renderContext();
-    }
-
-    listSelect.onchange = () => guard(async () => {
-      const value = listSelect.value;
-      if (!value || value === "none") return clearList();
-      await selectList(value === "legacy" ? null : value);
-    });
-
-    function renderJwt(token) {
-      const [header, payload, signature] = token.split(".");
-      jwtBox.innerHTML =
-        `<span class="jwt-header">${escapeHtml(header)}</span>` +
-        `<span class="jwt-dot">.</span>` +
-        `<span class="jwt-payload">${escapeHtml(payload)}</span>` +
-        `<span class="jwt-dot">.</span>` +
-        `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
-    }
-
-    function renderAssignments(data) {
-      const rows = document.querySelector("#lst-rows");
-      rows.innerHTML = data.assignments.length
-        ? data.assignments.map((item) => `<tr>
-            <td class="cell-mono">${escapeHtml(item.credential_id)}</td>
-            <td class="cell-mono">${item.idx}</td>
-            <td><span class="status-chip status-${escapeHtml(item.status.toLowerCase())}">${escapeHtml(item.status)}</span></td>
-          </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="3">${activeListUri ? "This list is allocated through the status-list API; its entries carry no credential identifier." : "No credential is assigned to an index yet."}</td></tr>`;
-      const pagination = document.querySelector("#assignment-pagination");
-      pagination.innerHTML = "";
-      if (data.assignment_total <= data.assignment_limit) return;
-      const start = data.assignment_offset + 1;
-      const end = Math.min(data.assignment_total, data.assignment_offset + data.assignment_limit);
-      const label = document.createElement("span");
-      label.className = "text-sm text-muted";
-      label.textContent = `Showing ${start}–${end} of ${data.assignment_total}`;
-      pagination.append(label);
-      const previous = document.createElement("button");
-      previous.className = "btn btn-sm btn-outline";
-      previous.type = "button";
-      previous.textContent = "Previous";
-      previous.disabled = data.assignment_offset === 0;
-      previous.onclick = () => guard(() => showCard(
-        activeListUri,
-        Math.max(0, data.assignment_offset - data.assignment_limit),
-        data.assignment_limit,
-      ));
-      const next = document.createElement("button");
-      next.className = "btn btn-sm btn-outline";
-      next.type = "button";
-      next.textContent = "Next";
-      next.disabled = end >= data.assignment_total;
-      next.onclick = () => guard(() => showCard(
-        activeListUri,
-        data.assignment_offset + data.assignment_limit,
-        data.assignment_limit,
-      ));
-      pagination.append(previous, next);
-
-    }
     function renderDecodedToken(data) {
       currentToken = data.token;
-      renderJwt(data.token);
-      document.querySelector("#lst-scope").textContent =
-        `Working list: ${data.list_uri}`;
-      document.querySelector("#jwks-label").textContent = activeListUri
-        ? "JWKS · list signer certificate"
-        : "JWKS · /.well-known/jwks.json";
+      renderJwt(jwtBox, data.token);
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
-      document.querySelector("#jwks").textContent = JSON.stringify(data.jwks, null, 2);
       document.querySelector("#lst-bits").textContent = data.bits;
       document.querySelector("#lst-size").textContent = data.size;
       document.querySelector("#lst-valid").textContent = data.valid;
@@ -1418,17 +1218,13 @@ _CONSOLE_SCRIPT = """<script>
       document.querySelector("#lst-note").textContent =
         `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
         `${data.lst.inflated_bytes} bytes holding ${data.lst.entries} entries at ` +
-        `${data.bits} bit per entry. The inflated entries are shown below.`;
+        `${data.bits} bit per entry. The Decoded status list tab shows the inflated entries.`;
 
       const shown = data.revoked_indices.slice(0, 200);
       const rest = data.revoked_indices.length - shown.length;
       document.querySelector("#lst-indices").textContent = shown.length
         ? shown.join(", ") + (rest > 0 ? `, and ${rest} more` : "")
         : "None";
-
-      renderAssignments(data);
-
-      tokenCard.hidden = false;
     }
 
     copyButton.onclick = async () => {
@@ -1446,24 +1242,8 @@ _CONSOLE_SCRIPT = """<script>
       }
       setTimeout(() => { copyButton.textContent = "Copy the JWT"; }, 2000);
     };
-    document.querySelector("#token").onclick = () => guard(async () => {
-      await showCard(activeListUri);
-      write(
-        `Status list token fetched for ${contextLabel()}. ` +
-        "The decoded token, status list and signing key are shown below the output.",
-      );
-      tokenCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
 
-    document.querySelector("#reset").onclick = () => guard(async () => {
-      const data = await jsonFetch("/reset", { method: "POST" });
-      verification = {};
-      write(data);
-      await load();          // every pool is gone: the context falls back
-      await refreshCard();
-    });
-
-    load().catch(write);
+    load().catch(notify);
   </script>"""
 
 
@@ -1477,53 +1257,76 @@ def console_html() -> str:
     )
 
 
-_EXPLORER_BODY = """  <header class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>Status list explorer</h1>
-      <p>Paste a Token Status List from any issuer and inspect it: the decoded header and
-        payload, the inflated <span class="mono">lst</span>, every revoked index, and the status
-        of a single index. Accepts a JWT, a CWT as hex or base64, the JSON payload, or the
-        bare <span class="mono">lst</span> value. Signatures are not verified.</p>
-    </div>
-  </header>
-  <main class="page-content">
+_EXPLORER_BODY = (
+    _hero_band(
+        "Status list explorer",
+        "Paste a Token Status List from any issuer and inspect it: the decoded header and"
+        ' payload, the inflated <span class="mono">lst</span>, every revoked index, and the'
+        " status of a single index.",
+    )
+    + """
+  <main>
+    <section class="page-section" aria-labelledby="payload-title">
     <div class="container">
-    <div class="stack">
-      <section class="card">
-        <div class="section-header"><h2>Payload</h2></div>
-        <label class="field-label" for="explore-payload">Status list JWT, CWT, JSON payload or lst</label>
+"""
+    + _section_intro(
+        2,
+        "payload-title",
+        "Inspect a status list",
+        'Paste a JWT, a CWT as hex or base64, the JSON payload or the bare <span class="mono">lst</span>'
+        " value, load a file, or pick one of this server's lists. Signatures are not verified.",
+    )
+    + """
+      <label class="form-field">
+        <span class="subsection-heading">Payload</span>
         <textarea id="explore-payload" class="payload-input" spellcheck="false"
           placeholder="eyJhbGciOiJFUzI1NiIs… · d28450a3… · {&quot;bits&quot;:1,&quot;lst&quot;:&quot;eNrb…&quot;} · eNrb…"></textarea>
-        <div class="explorer-fields">
-          <div>
-            <label class="field-label" for="explore-bits">Bits per entry, for a bare lst</label>
-            <select id="explore-bits" class="explorer-select">
-              <option value="1" selected>1</option>
-              <option value="2">2</option>
-              <option value="4">4</option>
-              <option value="8">8</option>
-            </select>
-          </div>
-          <div>
-            <label class="field-label" for="explore-file">Or load a file</label>
-            <input id="explore-file" type="file" class="explorer-file">
+      </label>
+      <details class="disclosure mt-4">
+        <summary>Advanced</summary>
+        <div class="disclosure-body">
+          <div class="form-field">
+            <span class="subsection-heading" id="explore-bits-label">Bits per entry</span>
+            <div class="segmented bits-segmented" role="radiogroup" aria-labelledby="explore-bits-label">
+              <label><input type="radio" name="explore-bits" value="1" checked><span>1</span></label>
+              <label><input type="radio" name="explore-bits" value="2"><span>2</span></label>
+              <label><input type="radio" name="explore-bits" value="4"><span>4</span></label>
+              <label><input type="radio" name="explore-bits" value="8"><span>8</span></label>
+            </div>
+            <p class="text-sm text-muted">Read only for a bare <span class="mono">lst</span> value; tokens and JSON carry their own.</p>
           </div>
         </div>
-        <div class="btn-row mt-4">
-          <button id="explore" class="btn btn-md btn-primary">Inspect payload</button>
-          <button id="explore-current" class="btn btn-md btn-outline">Load this server's status list</button>
-        </div>
-        <pre class="output mt-4" id="explore-out">Paste a payload, then inspect it.</pre>
-      </section>
+      </details>
+      <div class="form-row mt-4">
+        <label class="form-field form-field-grow">
+          <span class="subsection-heading">Load from this server</span>
+          <select id="explore-server"><option value="">Choose a list…</option></select>
+        </label>
+        <label class="btn btn-lg btn-outline btn-file"><input id="explore-file" type="file">Load a file</label>
+        <button id="explore" class="btn btn-lg btn-primary" type="button">Inspect</button>
+      </div>
+    </div>
+    </section>
 
-      <section class="card" id="explore-card" hidden>
-        <div class="section-header"><h2>Decoded status list</h2></div>
-        <div class="metric-grid">
-          <div class="card">
-            <strong class="metric-value" id="explore-format">—</strong>
-            <span class="eyebrow">Format</span>
-          </div>
+    <section class="page-section page-section-white" id="explore-card" aria-labelledby="decoded-title" hidden>
+    <div class="container">
+"""
+    + _section_intro(2, "decoded-title", "Inspection result", '<span id="explore-summary"></span>')
+    + """
+      <div class="tabs" role="tablist" id="explore-tabs" aria-label="Inspection views">
+        <button class="tab-btn active" type="button" role="tab" id="explore-tab-decoded" data-tab="decoded" aria-selected="true" aria-controls="explore-decoded-panel">Decoded status list</button>
+        <button class="tab-btn" type="button" role="tab" id="explore-tab-token" data-tab="token" aria-selected="false" aria-controls="explore-token-panel" tabindex="-1">Token</button>
+      </div>
+
+      <div role="tabpanel" id="explore-decoded-panel" aria-labelledby="explore-tab-decoded">
+        <div class="form-row">
+          <label class="form-field form-field-md">
+            <span class="subsection-heading">Check an index</span>
+            <input id="explore-index" type="number" min="0" value="0">
+          </label>
+          <span id="explore-index-status" class="index-check-status" aria-live="polite"></span>
+        </div>
+        <div class="metric-grid mt-4">
           <div class="card">
             <strong class="metric-value" id="explore-bits-value">0</strong>
             <span class="eyebrow">Bits per entry</span>
@@ -1533,26 +1336,16 @@ _EXPLORER_BODY = """  <header class="hero">
             <span class="eyebrow">Entries</span>
           </div>
           <div class="card">
-            <strong class="metric-value" id="explore-revoked">0</strong>
-            <span class="eyebrow">Revoked</span>
+            <strong class="metric-value" id="explore-valid">0</strong>
+            <span class="eyebrow">Valid</span>
+          </div>
+          <div class="card">
+            <strong class="metric-value" id="explore-not-valid">0</strong>
+            <span class="eyebrow">Not valid</span>
           </div>
         </div>
         <p class="lst-note" id="explore-note"></p>
-
-        <h3 class="subhead">Check an index</h3>
-        <div class="index-lookup">
-          <input id="explore-index" type="number" min="0" value="0" aria-label="Index">
-          <button id="explore-lookup" class="btn btn-sm btn-secondary">Check index</button>
-          <span id="explore-index-status"></span>
-        </div>
-
-        <h3 class="subhead">Non-valid indices</h3>
-        <div id="explore-indices" class="index-groups"></div>
-        <div class="btn-row mt-4">
-          <button id="explore-copy-indices" class="btn btn-sm btn-outline">Copy the indices</button>
-        </div>
-
-        <h3 class="subhead">Inflated lst spectrum</h3>
+        <p class="eyebrow mt-4">Inflated lst spectrum</p>
         <div class="bitmap-shell">
           <div class="bitmap-scroll" id="explore-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
             <div class="bitmap" id="explore-bitmap"></div>
@@ -1562,29 +1355,52 @@ _EXPLORER_BODY = """  <header class="hero">
           </div>
         </div>
         <p class="bitmap-caption" id="explore-caption"></p>
+        <p class="eyebrow mt-4">Non-valid indices</p>
+        <div id="explore-indices"></div>
+        <div class="btn-row mt-4" id="explore-copy-row">
+          <button id="explore-copy-indices" class="btn btn-sm btn-outline" type="button">Copy the indices</button>
+        </div>
+      </div>
 
-        <h3 class="subhead">Decoded token</h3>
-        <div class="decoded-grid">
-          <div>
-            <p class="eyebrow">Header</p>
-            <pre id="explore-header"></pre>
+      <div role="tabpanel" id="explore-token-panel" aria-labelledby="explore-tab-token" hidden>
+        <div class="jwt-columns" id="explore-columns">
+          <div id="explore-encoded">
+            <p class="eyebrow">Encoded</p>
+            <pre class="output jwt" id="explore-jwt"></pre>
+            <div class="flex-between gap-3 mt-4">
+              <p class="jwt-legend">
+                <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
+                <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
+                <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <p class="eyebrow">Payload</p>
+          <div class="jwt-decoded">
+            <div id="explore-header-block">
+              <p class="eyebrow">Decoded header</p>
+              <pre id="explore-header"></pre>
+            </div>
+            <p class="eyebrow mt-4">Decoded payload</p>
             <pre id="explore-payload-json"></pre>
           </div>
         </div>
-      </section>
+      </div>
     </div>
-    </div>
+    </section>
+"""
+    + _NOTICE
+    + """
   </main>"""
+)
 
 
 _EXPLORER_SCRIPT = """<script>
     const STATUS_NAMES = { 0: "VALID", 1: "REVOKED", 2: "SUSPENDED" };
+    const FORMAT_NAMES = { jwt: "a JWT", cwt: "a CWT", json: "a JSON payload", lst: "a bare lst" };
     const payloadInput = document.querySelector("#explore-payload");
-    const explorerOut = document.querySelector("#explore-out");
-    const exploreCard = document.querySelector("#explore-card");
+    const resultSection = document.querySelector("#explore-card");
+    const serverLists = document.querySelector("#explore-server");
+    const showTab = setupTabs(document.querySelector("#explore-tabs"));
     let explored = null;
 
     function statusName(value) {
@@ -1613,74 +1429,120 @@ _EXPLORER_SCRIPT = """<script>
             const indices = groups[name];
             const shown = indices.slice(0, 500);
             const rest = indices.length - shown.length;
-            return `<p class="eyebrow">${escapeHtml(name)} · ${indices.length}</p>` +
-              `<p class="index-list">${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}</p>`;
+            return `<div class="index-group"><p class="index-group-name">${escapeHtml(statusLabel(name))} · ${indices.length}</p>` +
+              `<p class="index-list">${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}</p></div>`;
           }).join("")
-        : `<p class="index-list">None. Every entry is VALID.</p>`;
+        : `<p class="index-list">None: every entry is valid.</p>`;
+      document.querySelector("#explore-copy-row").hidden = !names.length;
     }
 
+    // The index check answers as you type; an empty field shows nothing.
     function lookupIndex() {
-      if (!explored) return;
       const target = document.querySelector("#explore-index-status");
-      const index = Number(document.querySelector("#explore-index").value);
+      const raw = document.querySelector("#explore-index").value;
+      if (!explored || raw === "") {
+        target.innerHTML = "";
+        return;
+      }
+      const index = Number(raw);
       if (!Number.isInteger(index) || index < 0 || index >= explored.size) {
         target.innerHTML = `<span class="status-chip status-reject">Out of range: 0 to ${explored.size - 1}</span>`;
         return;
       }
       const name = statusName(statusAt(explored.lst, index));
-      target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(name)}</span>`;
+      target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(statusLabel(name))}</span>`;
     }
 
-    function renderExplored(data) {
-      explored = data;
-      document.querySelector("#explore-format").textContent = data.format.toUpperCase();
-      document.querySelector("#explore-bits-value").textContent = data.bits;
-      document.querySelector("#explore-size").textContent = data.size;
-      document.querySelector("#explore-revoked").textContent = data.counts.REVOKED || 0;
-      const counts = Object.entries(data.counts).map(([name, count]) => `${count} ${name}`).join(", ");
-      document.querySelector("#explore-note").textContent =
-        `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
-        `${data.lst.inflated_bytes} bytes holding ${data.size} entries at ${data.bits} ` +
-        `bit${data.bits === 1 ? "" : "s"} per entry: ${counts}.`;
+    // The Token tab: a JWT shows encoded beside decoded, a CWT or JSON payload
+    // its decoded parts only, and a bare lst has no token to show.
+    function renderToken(data, payload) {
+      const jwt = data.format === "jwt";
+      document.querySelector("#explore-tab-token").hidden = data.format === "lst";
+      document.querySelector("#explore-encoded").hidden = !jwt;
+      document.querySelector("#explore-columns").classList.toggle("jwt-columns-single", !jwt);
+      if (jwt) renderJwt(document.querySelector("#explore-jwt"), payload);
+      document.querySelector("#explore-header-block").hidden = !Object.keys(data.header).length;
       document.querySelector("#explore-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#explore-payload-json").textContent = JSON.stringify(data.payload, null, 2);
+    }
+
+    function renderExplored(data, payload) {
+      explored = data;
+      const signed = data.format === "jwt" || data.format === "cwt";
+      document.querySelector("#explore-summary").textContent =
+        `Decoded from ${FORMAT_NAMES[data.format] || data.format}: ${data.size} entries at ` +
+        `${data.bits} bit${data.bits === 1 ? "" : "s"} per entry.` +
+        (signed ? " The signature was not verified." : "");
+      document.querySelector("#explore-bits-value").textContent = data.bits;
+      document.querySelector("#explore-size").textContent = data.size;
+      document.querySelector("#explore-valid").textContent = data.counts.VALID || 0;
+      document.querySelector("#explore-not-valid").textContent = data.non_valid_indices.length;
+      const counts = Object.entries(data.counts)
+        .map(([name, count]) => `${count} ${statusLabel(name).toLowerCase()}`)
+        .join(", ");
+      document.querySelector("#explore-note").textContent =
+        `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
+        `${data.lst.inflated_bytes} bytes: ${counts}.`;
       renderIndices(data);
+      renderToken(data, payload);
+      resultSection.hidden = false;
+      showTab("decoded");
       renderBitmap("explore", data.lst, data.non_valid_indices);
-      exploreCard.hidden = false;
       lookupIndex();
     }
 
     async function inspect() {
       const payload = payloadInput.value.trim();
-      if (!payload) return void (explorerOut.textContent = "Paste a payload first.");
-      let response;
+      if (!payload) {
+        return notify("Paste a payload, load a file, or pick one of this server's lists.", "info", "Nothing to inspect");
+      }
+      const bits = Number(document.querySelector('input[name="explore-bits"]:checked').value);
+      let data;
       try {
-        response = await fetch("/debug/status-list/explore", {
+        data = await jsonFetch("/debug/status-list/explore", {
           method: "POST",
-          cache: "no-store",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ payload, bits: Number(document.querySelector("#explore-bits").value) }),
+          body: JSON.stringify({ payload, bits }),
         });
       } catch (error) {
-        explorerOut.textContent = String(error);
-        return;
-      }
-      const body = await response.json();
-      if (!response.ok) {
-        exploreCard.hidden = true;
+        resultSection.hidden = true;  // no stale result under a failed payload
         explored = null;
-        explorerOut.textContent = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail, null, 2);
-        return;
+        throw error;
       }
-      renderExplored(body);
-      explorerOut.textContent = `Decoded a ${body.format.toUpperCase()} status list: ${body.size} entries, ${body.non_valid_indices.length} not VALID.`;
+      renderExplored(data, payload);
+      resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
+    // This server's lists, the legacy one first; picking one inspects its JWT.
+    async function loadServerLists() {
+      const summaries = await jsonFetch("/debug/status-lists");
+      const chosen = serverLists.value;
+      serverLists.innerHTML =
+        '<option value="">Choose a list…</option>' +
+        '<option value="/status/1">Legacy credential list · /status/1</option>' +
+        summaries.map((item) => {
+          const path = new URL(item.status_list_uri).pathname;
+          return `<option value="${escapeHtml(path)}">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ${escapeHtml(item.list_id.slice(0, 8))}</option>`;
+        }).join("");
+      serverLists.value = chosen;
+    }
+    serverLists.onfocus = () => guard(loadServerLists);
+    serverLists.onchange = () => guard(async () => {
+      if (!serverLists.value) return;
+      const response = await fetch(serverLists.value, {
+        cache: "no-store",
+        headers: { accept: "application/statuslist+jwt" },
+      });
+      if (!response.ok) throw await response.text();
+      payloadInput.value = (await response.text()).trim();
+      await inspect();
+    });
+
     // Binary CWT files become base64; text files (JWT, JSON, hex) load as-is.
-    document.querySelector("#explore-file").onchange = async (event) => {
+    document.querySelector("#explore-file").onchange = (event) => guard(async () => {
       const file = event.target.files[0];
       if (!file) return;
       const bytes = new Uint8Array(await file.arrayBuffer());
+      event.target.value = "";  // picking the same file again still loads it
       let text = null;
       try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (error) { text = null; }
       if (text === null || bytes[0] === 0xd2 || bytes[0] === 0xd8 || bytes[0] === 0x84) {
@@ -1691,31 +1553,18 @@ _EXPLORER_SCRIPT = """<script>
         payloadInput.value = text.trim();
       }
       await inspect();
-    };
+    });
 
-    document.querySelector("#explore-current").onclick = async () => {
-      let response;
-      try {
-        response = await fetch("/status/1", { cache: "no-store", headers: { accept: "application/statuslist+jwt" } });
-      } catch (error) {
-        explorerOut.textContent = String(error);
-        return;
-      }
-      payloadInput.value = await response.text();
-      await inspect();
-    };
-
-    document.querySelector("#explore").onclick = inspect;
-    document.querySelector("#explore-lookup").onclick = lookupIndex;
-    document.querySelector("#explore-index").onkeydown = (event) => {
-      if (event.key === "Enter") lookupIndex();
-    };
+    document.querySelector("#explore").onclick = () => guard(inspect);
+    document.querySelector("#explore-index").oninput = lookupIndex;
     document.querySelector("#explore-copy-indices").onclick = async (event) => {
       if (!explored) return;
       await navigator.clipboard.writeText(explored.non_valid_indices.join(","));
       event.target.textContent = "Copied";
       setTimeout(() => { event.target.textContent = "Copy the indices"; }, 2000);
     };
+
+    guard(loadServerLists);
   </script>"""
 
 
@@ -1735,19 +1584,25 @@ SWAGGER_JS = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.j
 
 def docs_html(openapi_url: str) -> str:
     """Swagger UI inside the same branded shell as the rest of the app."""
-    body = """  <header class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">EUDI conformance utility</p>
-      <h1>API documentation</h1>
-      <p>Every endpoint of the mock Token Status List server, generated from the
-        OpenAPI document at <span class="mono">/openapi.json</span>.</p>
-    </div>
-  </header>
-  <main class="page-content">
+    body = (
+        _hero_band("API documentation", "Every endpoint of the mock Token Status List server.")
+        + """
+  <main>
+    <section class="page-section" aria-labelledby="endpoints-title">
     <div class="container">
+"""
+        + _section_intro(
+            2,
+            "endpoints-title",
+            "Endpoints",
+            'Generated from the OpenAPI document at <span class="mono">/openapi.json</span>.',
+        )
+        + """
       <div class="docs-frame"><div id="swagger-ui"></div></div>
     </div>
+    </section>
   </main>"""
+    )
     return page(
         title="API documentation · Credimi",
         active="API docs",

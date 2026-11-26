@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 import time
@@ -7,7 +8,6 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -16,7 +16,7 @@ from cwt_codec import (
     STATUS_LIST_CWT_MEDIA_TYPE,
     encode_cwt,
 )
-from key_material import material_for
+from key_material import jwk_thumbprint, material_for, pem_kid
 from list_registry import IDENTIFIER_LIST_KIND, TOKEN_LIST_KIND, StatusListRegistry
 from models import CredentialResponse, RevokeResponse
 from status_list import (
@@ -41,7 +41,6 @@ STATUS_LIST_URI = f"{ISSUER}/status/1"
 # Section 9 of the Token Status List draft: the document listing every Status
 # List Token URI this issuer offers, the legacy list included.
 STATUS_LIST_AGGREGATION_URI = f"{ISSUER}/token_status_list/aggregation"
-KEY_ID = "mock-eudi-status-list-1"
 INDEX_CURSOR_START = 42
 KEYS_DIR = Path(__file__).resolve().parent / "keys"
 PRIVATE_KEY_PATH = KEYS_DIR / "private.pem"
@@ -98,21 +97,8 @@ class TestKeyStore:
             .decode("ascii")
         )
 
-    def jwks(self) -> dict[str, list[dict[str, str]]]:
-        numbers = self.private_key().public_key().public_numbers()
-        return {
-            "keys": [
-                {
-                    "kty": "EC",
-                    "crv": "P-256",
-                    "kid": KEY_ID,
-                    "use": "sig",
-                    "alg": "ES256",
-                    "x": _base64url_uint(numbers.x, 32),
-                    "y": _base64url_uint(numbers.y, 32),
-                }
-            ]
-        }
+    def jwk(self) -> dict[str, str | list[str]]:
+        return _jwk(self.private_key().public_key())
 
     def _load_or_create_private_key(self):
         if PRIVATE_KEY_PATH.exists():
@@ -215,7 +201,7 @@ class InMemoryIssuer:
             private_key_pem=private_key_pem,
             issuer=ISSUER,
             subject=STATUS_LIST_URI,
-            kid=KEY_ID,
+            kid=pem_kid(private_key_pem),
             bits=DEFAULT_BITS,
             aggregation_uri=STATUS_LIST_AGGREGATION_URI,
             issued_at=issued_at,
@@ -292,39 +278,47 @@ def list_version() -> int:
     return issuer_state.version
 
 
-def public_jwks() -> dict[str, list[dict[str, str]]]:
-    return key_store.jwks()
-
-
-def eudi_public_jwks(country: str) -> dict[str, list[dict[str, str]]]:
-    """Public JWKS for the key that signs one country's status lists.
-
-    Mirrors `build_eudi_token`: operator material when configured, otherwise
-    the local test key.
-    """
-    material = material_for(country)
-    try:
-        certificate_der = material.certificate_der
-    except FileNotFoundError:
-        return key_store.jwks()
-    if certificate_der is None:
-        return key_store.jwks()
-    numbers = x509.load_der_x509_certificate(
-        certificate_der
-    ).public_key().public_numbers()
-    return {
-        "keys": [
-            {
-                "kty": "EC",
-                "crv": "P-256",
-                "kid": material.kid,
-                "use": "sig",
-                "alg": "ES256",
-                "x": _base64url_uint(numbers.x, 32),
-                "y": _base64url_uint(numbers.y, 32),
-            }
-        ]
+def _jwk(
+    public_key: ec.EllipticCurvePublicKey, certificate_der: bytes | None = None
+) -> dict[str, str | list[str]]:
+    numbers = public_key.public_numbers()
+    jwk: dict[str, str | list[str]] = {
+        "kty": "EC",
+        "crv": "P-256",
+        "kid": jwk_thumbprint(public_key),
+        "use": "sig",
+        "alg": "ES256",
+        "x": _base64url_uint(numbers.x, 32),
+        "y": _base64url_uint(numbers.y, 32),
     }
+    if certificate_der is not None:
+        jwk["x5c"] = [base64.b64encode(certificate_der).decode("ascii")]
+    return jwk
+
+
+def server_jwks() -> dict[str, list[dict[str, str | list[str]]]]:
+    """Every key this server signs status lists with, once each (RFC 7517).
+
+    The `kid` is each key's RFC 7638 thumbprint, so all tokens one key signs,
+    the legacy list and every country list alike, resolve to one entry. A
+    country key with a certificate carries it in `x5c` (RFC 7517 §4.7), the
+    chain its tokens' headers advertise.
+    """
+    keys: dict[str, dict[str, str | list[str]]] = {}
+    for country in sorted({summary.country for summary in eudi_registry.list_summaries()}):
+        material = material_for(country)
+        try:
+            private_pem = material.private_pem
+        except FileNotFoundError:
+            continue  # build_eudi_token signs these with the legacy key, added below
+        private_key = serialization.load_pem_private_key(
+            private_pem.encode("ascii"), password=None
+        )
+        jwk = _jwk(private_key.public_key(), material.certificate_der)
+        keys.setdefault(jwk["kid"], jwk)
+    legacy = key_store.jwk()
+    keys.setdefault(legacy["kid"], legacy)
+    return {"keys": list(keys.values())}
 
 
 def public_key_pem() -> str:
@@ -343,6 +337,10 @@ def take_eudi_reference(
     allocation_id: str | None = None,
 ):
     return eudi_registry.take(country, doctype, expiry_date, allocation_id)
+
+
+def take_eudi_entries(uri: str, expiry_date: str, count: int):
+    return eudi_registry.take_from(uri, expiry_date, count)
 
 
 def eudi_status_at(uri: str, idx: int) -> int:
@@ -387,6 +385,7 @@ def build_eudi_token(
         # endpoint; production deployments should provide EUDI_KEY_DIR.
         private_pem = key_store.private_pem()
     certificate = material.certificate_der
+    kid = pem_kid(private_pem)  # the key that signs, whichever path supplied it
     now = int(time.time()) if issued_at is None else issued_at
     if kind == TOKEN_LIST_KIND:
         if format_name == "jwt":
@@ -395,7 +394,7 @@ def build_eudi_token(
                 private_key_pem=private_pem,
                 issuer=ISSUER,
                 subject=uri,
-                kid=material.kid,
+                kid=kid,
                 certificate_der=certificate,
                 aggregation_uri=STATUS_LIST_AGGREGATION_URI,
                 issued_at=now,
@@ -418,7 +417,7 @@ def build_eudi_token(
                 private_pem,
                 STATUS_LIST_CWT_MEDIA_TYPE,
                 certificate,
-                kid=material.kid,
+                kid=kid,
             )
             return token, STATUS_LIST_CWT_MEDIA_TYPE
         return token, "application/statuslist+jwt"
@@ -429,7 +428,7 @@ def build_eudi_token(
             private_key_pem=private_pem,
             issuer=ISSUER.rstrip("/"),
             subject=uri,
-            kid=material.kid,
+            kid=kid,
             certificate_der=certificate,
             issued_at=now,
         )
@@ -447,7 +446,7 @@ def build_eudi_token(
             private_pem,
             IDENTIFIER_LIST_CWT_MEDIA_TYPE,
             certificate,
-            kid=material.kid,
+            kid=kid,
         )
         return token, IDENTIFIER_LIST_CWT_MEDIA_TYPE
     return token, "application/identifierlist+jwt"

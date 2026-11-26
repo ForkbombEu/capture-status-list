@@ -13,8 +13,11 @@ where `lst` is the zlib-compressed status byte array encoded as base64url
 without padding in JWT form (raw compressed bytes in CWT form).
 
 CWT tokens are RFC 9052 COSE_Sign1 (tag 18): ES256 over the `Signature1`
-Sig_structure, a 64-byte `r || s` signature, and the country `kid` (for
-example `EU-status-list`) in the unprotected header, matching the JWT `kid`.
+Sig_structure, a 64-byte `r || s` signature, and the `kid` in the unprotected
+header, matching the JWT `kid`. Every token's `kid` is the RFC 7638 thumbprint
+of the key that signed it, so one key has one `kid` wherever it signs, and
+`GET /.well-known/jwks.json` (the console's `TSL JWKS` link) lists each signing
+key once, with its certificate in `x5c` when it has one.
 Every Status List and Identifier List token, JWT and CWT alike, carries `exp`
 (CWT label 4) and `ttl` (CWT label 65534); see [Token lifetime](#token-lifetime).
 
@@ -316,10 +319,9 @@ curl http://localhost:8000/token_status_list/aggregation
 values for debugging. `GET /debug/status-lists` lists all allocated pools for
 the console, and `GET /debug/status-list` decodes one of them:
 `?uri=<status-list-uri>` decodes a specific allocated list, while leaving `uri`
-out decodes the legacy `/status/1` list. The console uses that selector for its
-`TSL · JWT` and `TSL · CWT` previews and after revoking an allocated entry, so a
-revocation made through the API shows up in the decoded status list, not only in
-the allocated-entry table.
+out decodes the legacy `/status/1` list. The console decodes the chosen list
+with it, so a revocation made through the API shows up in the decoded status
+list, not only in the entries table.
 
 The console revokes allocated entries through its unauthenticated dashboard-only
 endpoint, and starts or tops up pools through a second one:
@@ -333,26 +335,39 @@ curl -X POST http://localhost:8000/dashboard/status-lists \
   -d '{"country":"EU","doctype":"org.iso.18013.5.1.mDL","expiry_date":"2099-12-31","count":10}'
 ```
 
+`POST /dashboard/status-lists/entries` tops up one chosen list instead: it
+allocates `count` entries in `status_list_uri` only, and answers `400` when that
+list has no room rather than rolling over into a new list of the pool. The
+console's `Add` uses it, so entries always land in the open list:
+
+```sh
+curl -X POST http://localhost:8000/dashboard/status-lists/entries \
+  -H 'content-type: application/json' \
+  -d '{"status_list_uri":"http://localhost:8000/token_status_list/EU/org.iso.18013.5.1.mDL/<uuid>","expiry_date":"2099-12-31","count":10}'
+```
+
 The reference-compatible `take` and `set` endpoints remain API-key-protected.
 
 Every allocated country × doctype pool is a resource of its own: revoking an
-entry there does not touch the legacy `/status/1` list. The console therefore
-works on one list at a time. `Country × doctype lists` is the inventory and the
-chooser: it lists every pool as a plain table with no row buttons, `Operate on`
-selects the list to work with, and the green `New status list` button opens a
-country / doctype / expiry form that allocates a pool and switches to it. The
-panels below the inventory then belong to the chosen list:
+entry there does not touch the legacy `/status/1` list, which the console does
+not show; it remains available through the API below. The console works on one
+pool at a time:
 
-- nothing selected — only the inventory;
-- the legacy list — the credentials panel (verification plus its own batch
-  insert, which creates `/status/1` credentials and one paired entry each) and
-  the decoded `/status/1` token;
-- an allocated pool — that pool's allocated entries with `Add entries to this
-  list` (indices only, no credentials) and the decoded token for the pool.
+- The table of pools is the inventory and the chooser: click a row (or press
+  Enter on it) to work on that pool. Beneath it, `Refresh lists` reloads the
+  table and `New status list` opens a one-row country / doctype / expiry form
+  whose `Create` allocates a pool and switches to it.
+- Clicking a row opens that pool's panel underneath it (the chevron marks the
+  open row; clicking it again closes it), with three tabs: `Entries` (every
+  allocated entry, each with its own `Revoke`; under the table, `Add entries`
+  opens a count / expiry row whose `Add` tops up this list), `Token` (the
+  encoded JWT beside its decoded header and payload) and `Decoded status list`
+  (counts, the inflated `lst` and the revoked indices). Each list's name opens
+  its URI, the served token, in a new tab. The signing key is the server's, not
+  the list's: the topbar's `TSL JWKS` opens it.
 
-The picker labels each option with its revoked count, starts unselected, and is
-the only thing that moves the console between lists. A pool that disappears
-(state reset, server restart) drops back to the unselected view.
+A pool that disappears (state reset, server restart) drops back to the
+unselected view. Failures show in one dismissible alert.
 
 Create a test credential:
 
@@ -402,8 +417,8 @@ Read a raw status value through the debug-only endpoint:
 curl http://localhost:8000/debug/status/42
 ```
 
-Decode a Status List Token — header, payload, the inflated `lst`
-and the signing JWKS — through the debug-only endpoint the console uses. Append
+Decode a Status List Token — header, payload and the inflated `lst` — through
+the debug-only endpoint the console uses. Append
 `?uri=<status-list-uri>` to decode an API-allocated list instead of the legacy
 `/status/1` list. The `lst` field carries the compressed and inflated byte
 counts plus a readable window of the inflated entries, one hex digit per entry
@@ -422,17 +437,22 @@ curl -X POST http://localhost:8000/reset
 ## Status list explorer
 
 `/explorer` is a standalone debugger for status lists from any issuer, not
-only this server. Paste a payload (or load a file) and it shows the decoded
-header and payload, the inflated `lst` spectrum, every non-valid index grouped
-by status (`REVOKED`, `SUSPENDED`, `UNKNOWN(n)`), and the status of a single
-index. Accepted inputs:
+only this server. Paste a payload, load a file, or pick one of this server's
+lists (the country lists and the legacy `/status/1`) and press **Inspect**.
+The result has two tabs, as in the console: **Decoded status list** shows an
+index check that answers as you type, the counts, the inflated `lst`
+spectrum and every non-valid index grouped by status (Revoked, Suspended,
+Unknown); **Token** shows a JWT encoded beside its decoded header and payload,
+or the decoded parts of a CWT or JSON payload. Errors appear in a dismissible
+alert. Accepted inputs:
 
 - a Status List JWT (`header.payload.signature`)
 - a Status List CWT (COSE_Sign1, optionally CWT-tagged) as hex, base64 or
-  base64url; binary `.cwt` files are accepted through the file picker
+  base64url; binary `.cwt` files are accepted through **Load a file**
 - the JSON payload with a `status_list` claim, or the bare
   `{"bits": …, "lst": …}` claim
-- the `lst` value alone, decoded with the selected bits per entry
+- the `lst` value alone, decoded with the bits per entry set under
+  **Advanced**
 
 Signatures are not verified: a foreign list's signing key is unknown here, so
 the explorer is an inspection tool, not a verifier. Inflated lists are capped at

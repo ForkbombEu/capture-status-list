@@ -145,8 +145,19 @@ def test_explorer_page_is_reachable_from_the_topbar() -> None:
     response = client.get("/explorer")
 
     assert response.status_code == 200
-    assert '<a href="/explorer" aria-current="page">Explorer</a>' in response.text
+    assert '<a href="/explorer" class="nav-active" aria-current="page">Explorer</a>' in response.text
     assert '<a href="/explorer">Explorer</a>' in client.get("/").text
+
+
+def test_explorer_keeps_rare_options_folded_and_reports_in_the_alert() -> None:
+    page = client.get("/explorer").text
+    advanced = page[page.index('<details class="disclosure') : page.index("</details>")]
+
+    assert 'name="explore-bits"' in advanced
+    assert 'id="explore-server"' in page
+    assert 'id="explore-tabs"' in page
+    assert 'id="notice"' in page
+    assert 'id="explore-out"' not in page
 
 
 def test_packed_bit_order_is_lsb_first() -> None:

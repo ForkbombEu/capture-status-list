@@ -115,17 +115,7 @@ class StatusListRegistry:
         if state is None or state.cursor >= state.size:
             state = self._new_list(country, doctype)
             self._current[key] = state
-        state.issued_expiry = max(state.issued_expiry or expiry, expiry)
-        cursor = state.cursor
-        state.cursor += 1
-        state.allocated_expiries.append(expiry)
-        idx = state.scatter.permute(cursor)
-        reference = ListReference(
-            status_list_uri=state.token_uri(self.base_url),
-            identifier_list_uri=state.identifier_uri(self.base_url),
-            idx=idx,
-            list_id=state.list_id,
-        )
+        reference = self._allocate(state, expiry)
         if allocation_id is not None:
             self._allocation_replays[(country, doctype, allocation_id)] = (
                 expiry_date,
@@ -133,6 +123,32 @@ class StatusListRegistry:
             )
         return reference
 
+    def take_from(self, uri: str, expiry_date: str, count: int) -> list[ListReference]:
+        """Allocate `count` entries of one given token list, never of another.
+
+        A list without room is refused rather than rolled over into a fresh one:
+        the caller chose this list, so its entries must land in it.
+        """
+        kind, state = self.get_by_uri(uri)
+        if kind != TOKEN_LIST_KIND:
+            raise ValueError("uri must reference a token status list")
+        expiry = self._parse_expiry(expiry_date)
+        free = state.size - state.cursor
+        if count > free:
+            raise ValueError(f"the list has {free} free entries left")
+        return [self._allocate(state, expiry) for _ in range(count)]
+
+    def _allocate(self, state: ListState, expiry: date) -> ListReference:
+        state.issued_expiry = max(state.issued_expiry or expiry, expiry)
+        cursor = state.cursor
+        state.cursor += 1
+        state.allocated_expiries.append(expiry)
+        return ListReference(
+            status_list_uri=state.token_uri(self.base_url),
+            identifier_list_uri=state.identifier_uri(self.base_url),
+            idx=state.scatter.permute(cursor),
+            list_id=state.list_id,
+        )
 
     def get_by_uri(self, uri: str) -> tuple[str, ListState]:
         kind, country, doctype, list_id = self.parse_uri(uri)

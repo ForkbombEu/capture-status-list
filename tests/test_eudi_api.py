@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -5,11 +6,13 @@ import sys
 from urllib.parse import urlparse
 
 import jwt
+from cryptography import x509
 from fastapi.testclient import TestClient
 
 from app import app
 from cwt_codec import decode_cwt
-from issuer import public_key_pem, reset_eudi_registry, reset_state
+from issuer import eudi_registry, public_key_pem, reset_eudi_registry, reset_state
+from key_material import jwk_thumbprint
 from verifier import check_status
 
 
@@ -267,6 +270,32 @@ def test_dashboard_creates_and_tops_up_a_status_list() -> None:
     assert client.get("/debug/status-lists").json()[0]["allocated"] == 5
 
 
+def test_dashboard_adds_entries_only_to_the_chosen_list(monkeypatch) -> None:
+    monkeypatch.setattr(eudi_registry, "size", 2)
+    pool = {"country": "ZZDEMO", "doctype": "org.iso.18013.5.1.mDL", "expiry_date": "2099-12-31"}
+    full = client.post("/dashboard/status-lists", json={**pool, "count": 2}).json()
+    current = client.post("/dashboard/status-lists", json={**pool, "count": 1}).json()
+    assert current["status_list_uri"] != full["status_list_uri"]
+
+    # The chosen list has room: the entry lands in it.
+    added = client.post(
+        "/dashboard/status-lists/entries",
+        json={"status_list_uri": current["status_list_uri"], "count": 1},
+    )
+    assert added.status_code == 200
+    assert added.json()["status_list_uri"] == current["status_list_uri"]
+
+    # The chosen list is full: refused, never rolled over into another list.
+    refused = client.post(
+        "/dashboard/status-lists/entries",
+        json={"status_list_uri": full["status_list_uri"], "count": 1},
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "the list has 0 free entries left"
+    allocated = {item["status_list_uri"]: item["allocated"] for item in client.get("/debug/status-lists").json()}
+    assert allocated == {full["status_list_uri"]: 2, current["status_list_uri"]: 2}
+
+
 def test_dashboard_status_list_rejects_a_past_expiry() -> None:
     response = client.post(
         "/dashboard/status-lists",
@@ -342,7 +371,9 @@ def test_local_mode_tokens_carry_x5c_and_verify_end_to_end(monkeypatch) -> None:
         local_path(uri), headers={"Accept": "application/statuslist+jwt"}
     ).text
     header = jwt.get_unverified_header(token)
-    assert header["kid"] == "EU-status-list"
+    # The kid is the signing key's RFC 7638 thumbprint, the key in x5c.
+    certificate = x509.load_der_x509_certificate(base64.b64decode(header["x5c"][0]))
+    assert header["kid"] == jwk_thumbprint(certificate.public_key())
     assert header["x5c"]
 
     assert check_status(idx, token, expected_subject=uri) == "VALID"
@@ -378,7 +409,28 @@ def test_debug_status_list_decodes_the_allocated_list_with_uri() -> None:
     # allocated-entry table instead of credential assignments.
     assert decoded["assignments"] == []
     assert decoded["assignment_total"] == 0
-    assert decoded["jwks"]["keys"][0]["kid"] == decoded["header"]["kid"]
+
+
+def test_well_known_jwks_lists_each_signing_key_once(monkeypatch) -> None:
+    monkeypatch.delenv("EUDI_KEY_DIR", raising=False)
+    headers = []
+    for country in ("EU", "IT"):
+        uri = client.post(
+            "/token_status_list/take",
+            headers={"X-Api-Key": "test"},
+            data={"country": country, "doctype": "org.iso.18013.5.1.mDL", "expiry_date": "2099-12-31"},
+        ).json()["status_list"]["uri"]
+        token = client.get(local_path(uri), headers={"Accept": "application/statuslist+jwt"}).text
+        headers.append(jwt.get_unverified_header(token))
+    legacy = client.get("/status/1", headers={"Accept": "application/statuslist+jwt"}).text
+    headers.append(jwt.get_unverified_header(legacy.strip('"')))
+
+    # Local mode signs every list, the legacy one included, with one key: one
+    # kid for every token and one JWKS entry, carrying the certificate in x5c.
+    assert len({header["kid"] for header in headers}) == 1
+    [key] = client.get("/.well-known/jwks.json").json()["keys"]
+    assert key["kid"] == headers[0]["kid"]
+    assert key["x5c"] == headers[0]["x5c"]
 
 
 def test_debug_status_list_without_uri_still_decodes_the_legacy_list() -> None:

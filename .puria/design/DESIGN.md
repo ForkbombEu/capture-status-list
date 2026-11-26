@@ -38,6 +38,7 @@ override — [§16](#16-merge-record) records how that came to be.
 14. [Chips and badges](#14-chips-and-badges)
 15. [Do & Don't](#15-do--dont)
 16. [Merge record](#16-merge-record)
+17. [Page layout update](#17-page-layout-update)
 
 ---
 
@@ -241,13 +242,13 @@ popovers, inputs. _Never_ put content directly on a pure-white page background
 
 ```css
 --bg:           #FFFFFF;
---bg-muted:     #F6F6F6;   /* code/logo placeholder bg */
+--bg-muted:     #FAF8FC;   /* code/logo placeholder bg — a faint lavender */
 --bg-off-white: #FAFAFA;   /* text on indigo */
 --fg:           #2F294B;   /* body + heading ink */
 --fg-muted:     #9A97B5;   /* secondary text, rules */
 --fg-subtle:    #606083;   /* caption text */
 --border:       #E4E4E7;   /* input/card hairline */
---border-strong:#9A97B5;   /* table cell divider */
+--border-strong:#9A97B5;   /* rules, outlines, hover borders */
 --fg-on-primary:#FAFAFA;
 --card:         #FFFFFF;
 --popover:      #FFFFFF;
@@ -349,6 +350,8 @@ not used in product UI.
 - 12px, weight 500, letter-spacing 0.14em, uppercase.
 - `--fg-muted` on lavender, `--brand-secondary-strong` on indigo.
 - Always paired with a heading directly below.
+- Never above a hero or section title: the section intro carries the title on
+  its own ([§8](#8-layout--grid)).
 
 ### Numbers in display contexts
 
@@ -395,20 +398,21 @@ completely, step for step. Treat it as the spine.
 ```css
 --radius-xs:    4px    /* badges, status chips */
 --radius-sm:    5px    /* callout containers */
---radius:       6px    /* CANONICAL — buttons, inputs, cards */
+--radius:       6px    /* CANONICAL — inputs, cards */
 --radius-md:    8px    /* alerts, avatar squares */
---radius-lg:   10px    /* hero cards (rare) */
+--radius-lg:   10px    /* buttons, hero cards */
 --radius-xl:   12px    /* large feature blocks (rare) */
---radius-pill: 999px   /* pills, segmented controls */
+--radius-pill: 999px   /* pills */
 ```
 
-**6px is the canonical radius** for buttons, inputs and cards — reach for
-`--radius`. Chips and badges use `--radius-xs`, alerts `--radius-md`.
+**6px is the canonical radius** for inputs and cards — reach for `--radius`.
+Buttons use `--radius-lg` (10px), see [§11](#11-components). Chips and badges
+use `--radius-xs`, alerts `--radius-md`.
 
 > The two merged sources used the same radius names for different values
 > (`--radius-md` meant 6px in one and 8px in the other). The merge resolved it
 > by adopting the design system's names and rewriting every call site, so
-> `--radius` is now the single alias for the 6px button radius and the collision
+> `--radius` is now the single alias for the 6px radius and the collision
 > cannot come back. [§16](#16-merge-record) records the two pixel deltas that
 > resulted.
 
@@ -453,33 +457,74 @@ really needs to "lift" — usually it doesn't.
 ├─────────────────────────────────────────────┤
 │  topbar (sticky · white · 1px border)       │
 ├─────────────────────────────────────────────┤
-│  hero / header band                         │
-│  (lavender · diagonal-fold motif top-right) │
+│  hero band                                  │
+│  (deep indigo · white title + description   │
+│   · fold motif over the right part)         │
 ├─────────────────────────────────────────────┤
-│  main content                               │
-│  (lavender wash · max-width · white cards)  │
+│  page sections, 96px apart                  │
+│  (lavender wash, alternating with white;    │
+│   each opens with a section intro)          │
 ├─────────────────────────────────────────────┤
 │  footer (deep indigo · forkbomb sub-bar     │
 │          · Credimi Extras bottom strip)     │
 └─────────────────────────────────────────────┘
 ```
 
-### Section header pattern
+Every page opens with the hero band: the page's title at hero size in white,
+with a short white description, on `--brand-primary`. The page's content follows
+as a run of `.page-section`s, 96px top and bottom (64px on mobile), on the
+lavender wash; `.page-section-white` sets a section apart on white. Forms, QR
+codes, and their controls sit directly on the section, not in a card; a card is
+for a link to a document ([§11](#11-components)) or a panel whose border and
+fill show live state.
+
+```html
+<section class="hero-band" aria-labelledby="page-title">
+  <div class="hero-inner">
+    <header class="section-intro">
+      <div class="section-intro-heading">
+        <h1 class="section-intro-title" id="page-title">Wallet metadata capture</h1>
+      </div>
+      <div class="section-intro-description"><p>What the page is for.</p></div>
+    </header>
+  </div>
+</section>
+<section class="page-section" aria-labelledby="issue-title">
+  <div class="container">…</div>
+</section>
+```
+
+### Section intro pattern
 
 The most-used pattern in the product. Memorize it.
 
 ```html
-<div class="cd-section-header">
-  <h2>Test results <span class="count">3</span>:</h2>
-  <a class="cd-link">See all <span aria-hidden>↗</span></a>
-</div>
+<header class="section-intro">
+  <div class="section-intro-heading">
+    <h2 class="section-intro-title" id="issue-title">Issue a credential</h2>
+    <span class="count-chip">3</span>
+  </div>
+  <div class="section-intro-description">
+    <p>One or two sentences on what the section offers.</p>
+  </div>
+</header>
 ```
 
-- H2 title with trailing colon (always).
-- Optional inline count chip in lavender-grey.
-- 1px bottom border in `--border`.
-- Optional "See all ↗" link on the right, underlined, indigo, with the
-  arrow-up-right glyph.
+- The title in `--brand-primary`, h2 size, **no trailing colon**.
+- A 1px rule in `--border-strong` under the title row.
+- An optional count chip, or a "See all ↗" link, at the end of the title row.
+- One or two description paragraphs in `--fg-muted`, at most 720px wide.
+- Inside the hero band the same markup is the page title: no rule, white, at
+  hero size.
+- Groups inside a section are introduced by a `.subsection-heading` (20px, 700,
+  `--fg`).
+
+A card's own title row is a `.panel-head`: a sub-heading, an optional status
+chip at the end, and a 1px `--border` hairline under it, again with no colon.
+
+The colon heading (`.section-header`) and the lavender `.hero` remain in
+`brand/style.css` only so applications built on them keep their look until they
+migrate ([§17](#17-page-layout-update)).
 
 ### Card grid density
 
@@ -488,16 +533,16 @@ The most-used pattern in the product. Memorize it.
 | Dashboard | 2 columns | 16px |
 | Marketplace | 3 columns | 16px |
 | Hub / catalogue | 4 columns | 14px |
-| Scoreboard list | 1 column (full-width cards) | 18px |
+| Link cards | 3 columns (1 on mobile) | 20px |
 
-### Diagonal-fold motif
+### Fold motif
 
-A faint criss-cross pattern (two thin diagonals, opacity 0.06–0.10) lives in the
-**top-right of hero / page-header bands**. Echo it as a smaller watermark in the
-top-right of feature cards if the page needs the visual continuity.
+Two translucent white triangles fold the right part of the hero band: the
+upper one at 6% white, the lower one at 4%. `.hero-band` draws them; nothing
+else does.
 
-> Use it on **page headers and marketing surfaces**. Never as decoration in body
-> content, never as a full-bleed texture. If it competes for legibility, kill it.
+> Use it on **the hero band only**. Never as decoration in body content, never
+> as a full-bleed texture. If it competes for legibility, kill it.
 
 ---
 
@@ -576,6 +621,10 @@ static `--bg-muted` blocks.
 
 ## 11. Components
 
+Every component honours the `hidden` attribute: `brand/style.css` sets
+`[hidden] { display: none !important; }`, so a component's own `display` never
+reveals an element the page hid.
+
 ### Buttons
 
 | Variant | Use case | Fill | Text |
@@ -587,8 +636,12 @@ static `--bg-muted` blocks.
 | **Destructive** | Confirm-delete only. | `--destructive` | `--bg` |
 | **Link** | Inline / "See all ↗". | transparent | `--brand-primary` + underline |
 
-Sizes: `sm` (28px), `md` (40px default), `lg` (48px). All buttons use the 6px
-canonical radius. Label is 500 / 14 / 20.
+Sizes: `sm` (28px), `md` (36px), `lg` (44px). Use `lg` for a page's or a form's
+main actions, `md` inside cards and panels, `sm` in table rows and toolbars. All
+buttons use `--radius-lg` (10px). Labels are 600, at 13px (`sm` 12px, `lg`
+16px). These are the values `brand/style.css` renders; the Credimi Design System
+project still lists 40 / 48px, a 6px radius and a 500 / 14 label, and needs the
+same update so the two agree again.
 
 ### Alerts
 
@@ -600,7 +653,26 @@ canonical radius. Label is 500 / 14 / 20.
 
 Alerts are 1px-bordered, 8px-radius rectangles with a 60% white background
 (`rgba(255,255,255,0.6)`), 17px padding, a 500/16 heading + 400/14 body, and an
-18×18 Lucide icon in the top-left.
+18×18 Lucide icon in the top-left. An action, usually a ghost "Dismiss" button,
+closes the row.
+
+Inline, an alert sits at the top of the region it concerns. As feedback to an
+action it floats (`.alert-floating`): solid white with `--shadow-lg` in the
+bottom-right corner, until the user dismisses it or starts the next action.
+Failures and hints go to an alert, never to an output or log box in the page. A
+successful action shows its result where it happened, and needs an alert only
+when it has no visible result.
+
+```html
+<div class="alert alert-destructive alert-floating" role="alert">
+  <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">…triangle-alert…</svg>
+  <div>
+    <p class="alert-title">The action failed</p>
+    <p class="alert-body">The list has 3 free entries left.</p>
+  </div>
+  <button class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+</div>
+```
 
 ### Popovers / MegaMenu
 
@@ -624,10 +696,75 @@ Internal padding `16–20px`. Top row of a service card is always:
 
 On hover: border darkens to `--border-strong`. No `transform` lift.
 
+The one exception is a **link card**, a whole card that opens a document:
+see below.
+
+### Metric cards
+
+A row of key figures, such as a list's entries and how many are revoked: each
+is a card (above) holding a value in display type (700, `--fs-3xl`,
+`--brand-primary`) above its label in the [eyebrow](#eyebrow-pattern) style.
+Four to a row, two on mobile. Values are measures, so they are sans (see
+[Numbers in display contexts](#numbers-in-display-contexts)); a value that is an
+identifier, such as a version, is monospace.
+
+```html
+<div class="metric-grid">
+  <div class="card">
+    <strong class="metric-value">10000</strong>
+    <span class="eyebrow">Entries</span>
+  </div>
+  …
+</div>
+```
+
+### Tables
+
+Data tables follow the Scoreboard (`credimi.io/scoreboard`); `.test-table`
+inside a `.test-table-wrap` renders them.
+
+- A white surface (`--bg`, 6px `--radius`) on the lavender wash, with no border
+  and no shadow.
+- A 40px header band in `--brand-secondary-strong`. Its labels are uppercase
+  labels ([§6](#6-typography)): `--fs-xs`, weight 500, +0.14em, in
+  `--brand-primary`.
+- Rows divided by a 1px `--border` hairline, cells top-aligned with 12px of
+  padding; a hovered row turns `--bg-muted`.
+- The first cell names the row and may add a second line with its status chip
+  and counts, in the order of a test result row ([§12](#12-patterns)).
+
+```html
+<div class="test-table-wrap">
+  <table class="test-table">
+    <thead><tr><th>Pipeline</th><th>Last run</th></tr></thead>
+    <tbody>…</tbody>
+  </table>
+</div>
+```
+
+### Scrollbars
+
+Every scrollable surface uses Credimi's scrollbar, as credimi.io does: a 10px
+pill in `--brand-primary`, inset 2px on a transparent track, that lightens to
+85% indigo under the pointer. `brand/style.css` sets it for the whole page,
+through the `::-webkit-scrollbar` pseudo-elements in Blink and WebKit and
+`scrollbar-color` in Firefox. On an indigo surface, add `.scrollbar-on-dark`
+for a translucent white thumb.
+
 ### Inputs
 
-- 36px tall, 10px radius, 1px hairline border, white background.
-- Focus: `border-color: var(--brand-primary)` + 3px indigo ring at 18% alpha.
+Two sizes, by where the input lives:
+
+- **Form fields** (`.form-field`, see [Form row](#form-row)): every control
+  (text, number, date, select, textarea) is 44px tall, `--radius` (6px), 1px
+  `--border-strong`, white, with a 600/14 value; a textarea starts at 96px and
+  resizes vertically only. Focus: a 2px `--ring` outline, 2px offset.
+- **Search and toolbar inputs**: 36px tall, 10px radius, 1px hairline border,
+  white background. Focus: `border-color: var(--brand-primary)` + 3px indigo
+  ring at 18% alpha.
+- A file picker is a button: a `<label class="btn btn-outline btn-lg btn-file">`
+  wrapping the native file input, which stays focusable and out of sight; the
+  button shows the focus ring.
 - Placeholder copy uses sentence case + trailing colon:
   `Find applications, features and services:`
 
@@ -635,6 +772,136 @@ On hover: border darkens to `--border-strong`. No `transform` lift.
 
 Score % + band label, color-banded per [§5](#5-color). Always paired with the
 band label in the small `eyebrow` style next to the number.
+
+### Link cards
+
+A whole card that opens a document, usually in a new tab: its title, its URL in
+monospace, and the arrow-up-right glyph in the top-right corner. Its border is
+`--brand-primary`; on hover it lifts 4px with `--shadow-md`, the only card that
+moves, because the whole card is the link. A card whose target is not a safe
+URL is rendered as an `<article>`: hairline border, no arrow, no lift.
+
+```html
+<nav class="link-cards" aria-label="Issuer metadata">
+  <a class="link-card" href="https://…/.well-known/openid-credential-issuer"
+     target="_blank" rel="noreferrer">
+    <h3>OpenID4VCI credential issuer metadata</h3>
+    <p class="link-card-url">https://…/.well-known/openid-credential-issuer</p>
+  </a>
+</nav>
+```
+
+### Tabs
+
+Alternate views of one object, such as a list's entries, its token and its
+decoded content, one visible at a time. Not for moving between pages (that is
+the topbar) or for the steps of a flow. Labels are sentence case, one to three
+words; a count may follow as a chip. The row sits on a hairline; labels are
+500/13 `--fg-muted`, and the selected tab is `--brand-primary` with a 2px
+underline.
+
+Tabs follow the WAI-ARIA tabs pattern: `role="tablist"` around `role="tab"`
+buttons carrying `aria-selected` and `aria-controls`, only the selected tab in
+the tab order, Left and Right arrows moving between tabs, and each
+`role="tabpanel"` hidden while its tab is not selected.
+
+```html
+<div class="tabs" role="tablist" aria-label="List views">
+  <button class="tab-btn" type="button" role="tab" aria-selected="true" aria-controls="entries-panel">Entries</button>
+  <button class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
+</div>
+<div role="tabpanel" id="entries-panel">…</div>
+<div role="tabpanel" id="token-panel" hidden>…</div>
+```
+
+### Disclosure
+
+A collapsible panel, such as a form's advanced settings, closed by default. The
+summary is one short word or two ("Advanced") and ends in a chevron in `--fg`
+that points down when closed and up when open. Its content sits in
+`.disclosure-body`, 16px from the panel's edge.
+
+```html
+<details class="disclosure">
+  <summary>Advanced</summary>
+  <div class="disclosure-body">…</div>
+</details>
+```
+
+### Form row
+
+A form's controls on one row with the primary button last, on the right. Each
+field carries its label above it as a `.subsection-heading`, so the row aligns
+on the bottom. The button names the action in one word where it can ("Start",
+"Issue", "Verify"). A fixed-width field takes `.form-field-sm` (140px) or
+`.form-field-md` (200px); one `.form-field-grow` takes the rest. On mobile every
+control takes the full width.
+
+```html
+<div class="form-row">
+  <label class="form-field form-field-grow">
+    <span class="subsection-heading">Credential</span>
+    <select>…</select>
+  </label>
+  <button class="btn btn-primary btn-lg" type="submit">Issue</button>
+</div>
+```
+
+### Segmented control
+
+One choice out of two to four, such as a flow, painted as a rounded rectangle
+(`--radius`, its segments `--radius-xs`). The checked segment is
+`--brand-primary` with `--fg-on-primary` text. It is built from native radio
+inputs, so it keeps keyboard use and form state.
+
+```html
+<div class="form-field">
+  <span class="subsection-heading" id="flow-label">Flow</span>
+  <div class="segmented" role="radiogroup" aria-labelledby="flow-label">
+    <label><input type="radio" name="flow" value="issue" checked><span>Issue</span></label>
+    <label><input type="radio" name="flow" value="present"><span>Present</span></label>
+  </div>
+</div>
+```
+
+### Switch and featured option
+
+A switch is an on/off checkbox painted as a track, filled with
+`--brand-primary` when on. A **featured option** sets one switch apart: first in
+its panel, alone, on a white card with a 1px `--brand-primary` border, 4px on
+the left, and its label in `--brand-primary`. Use it for the single option that
+matters most, and at most once per panel. A link in its hint may point to the
+related service.
+
+```html
+<div class="featured-option">
+  <label class="switch">
+    <input type="checkbox" role="switch" checked>
+    <span class="switch-track" aria-hidden="true"></span>
+    <span class="featured-option-label">Include a Token Status List reference</span>
+  </label>
+  <p class="featured-option-hint">Why it matters, in one sentence.
+    <a href="https://tsl.credimi.io/" target="_blank" rel="noreferrer">Token Status List service ↗</a></p>
+</div>
+```
+
+### QR code, deeplink, and copy button
+
+A QR code sits in a small white box, 12px of white around the code. The deeplink
+it carries runs underneath at exactly the box's width, in monospace
+`--brand-primary`, breaking at any character so every line but the last fills
+the width; it is underlined only on hover. Under the deeplink, a small copy
+button: transparent with `--fg-muted` text, turning `--border` grey with `--fg`
+text on hover, never the primary blue. Its copy icon is the one icon a button
+may carry here, because it says what the button does.
+
+```html
+<div class="qr-box">…QR SVG…</div>
+<div class="deeplink-panel" aria-label="Credential offer deeplink">
+  <a class="deeplink" id="deeplink" href="openid-credential-offer://…">openid-credential-offer://…</a>
+  <button class="btn btn-sm btn-copy" type="button">…copy icon…<span>Copy</span></button>
+</div>
+```
 
 ---
 
@@ -670,8 +937,8 @@ express an empty state with copy alone — pair it with the illustration.
 
 ### Cross-cutting "See all" pattern
 
-Section header + `See all ↗` link on the right. Always underlined, indigo, with
-the arrow-up-right glyph (Lucide `ArrowUpRight`).
+Section intro + `See all ↗` link at the end of its title row. Always underlined,
+indigo, with the arrow-up-right glyph (Lucide `ArrowUpRight`).
 
 ---
 
@@ -732,12 +999,14 @@ category, so the pill and the plain label cannot drift apart.
 
 ### Do
 
-- ✓ Use the lavender wash + white card combo.
-- ✓ Keep cards hairline-bordered, shadow-less.
+- ✓ Open every page with the hero band, and every section with a section intro.
+- ✓ Sit forms and QR codes directly on the lavender wash; keep white cards for
+  link cards and live panels.
+- ✓ Keep cards hairline-bordered, shadow-less (link cards lift on hover only).
 - ✓ Use Inter at 700 for display, 400–500 for body.
 - ✓ Use `DD/MM/YYYY` for dates, monospace for IDs.
 - ✓ Match status colors exactly to the semantic palette.
-- ✓ Use the diagonal-fold motif sparingly, only in page headers.
+- ✓ Use the fold motif only in the hero band.
 - ✓ Show numbers unsoftened ("20 over 30 tests passed").
 - ✓ Pair every eyebrow with a heading directly below.
 
@@ -751,10 +1020,13 @@ category, so the pill and the plain label cannot drift apart.
 - ✗ Use Manrope as the body font. It was a former substitution — Inter IS
   the brand sans.
 - ✗ Use shadows on cards by default.
-- ✗ Use rounded corners with a left-border accent color.
+- ✗ Use rounded corners with a left-border accent color, except on the featured
+  option ([§11](#11-components)).
 - ✗ Use icons inside buttons unless the icon is semantically required.
 - ✗ Use exclamation marks anywhere in the product UI.
-- ✗ Use the diagonal-fold pattern as body decoration.
+- ✗ End a heading with a colon.
+- ✗ Put an eyebrow above a hero or section title.
+- ✗ Use the fold motif as body decoration.
 - ✗ Recolor or modify the logo.
 - ✗ Modify, regenerate, optimize, or convert anything in `brand/logos/`.
 - ✗ Hardcode a family name, hex, or px value that already has a token.
@@ -839,6 +1111,38 @@ The logo SVGs kept their bytes through the move, so their SHA-256 pins in
 Run the undefined-custom-property lint that `AGENTS.md` requires. It passes on
 `brand/style.css` today — 102 tokens defined, zero undefined `var()` references
 — and it is what keeps a future edit from silently dropping a declaration.
+
+---
+
+## 17. Page layout update
+
+On 25/11/2026 the page layout built for `credimi-capture-wallet` became the
+brand layout. It is in `brand/style.css` after the utilities, and every class it
+adds is documented in [§8](#8-layout--grid) and [§11](#11-components).
+
+| Area | Before | After |
+|---|---|---|
+| Page header | lavender `.hero`, muted text, criss-cross motif | indigo `.hero-band`, white title and description, two-triangle fold motif |
+| Sections | content on the lavender wash, inside white cards | `.page-section`s, 96px apart, optionally white; forms and QR codes uncarded |
+| Section heading | `.section-header`, h2 with a trailing colon | `.section-intro`: blue title, rule, description; no colon |
+| Card title | colon heading | `.panel-head`: sub-heading, chip, hairline; no colon |
+| Eyebrow | above page titles | never above a hero or section title |
+
+New components: link cards, disclosure, form row and form field, segmented
+control, switch and featured option, QR box, deeplink, and the copy button.
+
+Where the capture wallet's version broke an existing rule, the rule gives way:
+the featured option keeps its 4px left edge as the one exception to the
+left-border rule in [§15](#15-do--dont), and the segmented control is a rounded
+rectangle rather than a pill. Link cards carry no shadow until hovered.
+`--bg-muted` moved from the neutral `#F6F6F6` back to the faint lavender
+`#FAF8FC` the capture wallet used, so muted surfaces stay in the brand's hue.
+
+`.hero` and `.section-header` stay in the stylesheet, marked legacy, so the
+applications built on them keep their look until each migrates in its own task.
+
+The Credimi Design System project is the canonical specification and was not
+updated by this change; it needs the same update so the two agree again.
 
 ---
 

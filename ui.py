@@ -296,7 +296,8 @@ APP_CSS = """
       overflow-wrap: anywhere;
       text-align: left;
     }
-    .list-uri svg {
+    /* Icons in buttons (the URI arrow, refresh, new) follow the label colour. */
+    .btn svg {
       flex: 0 0 auto;
       width: 14px;
       height: 14px;
@@ -507,11 +508,12 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
-    /* The registry is the chooser: clicking a row makes it the working list. */
+    /* The registry is the chooser: clicking a row makes it the working list. It
+       sits on the lavender wash, so the chosen row takes the stronger lavender. */
     .registry-row { cursor: pointer; }
     .registry-row:hover td { background: var(--bg-muted); }
     .registry-row[aria-current="true"] td {
-      background: var(--brand-secondary);
+      background: var(--brand-secondary-strong);
       font-weight: 600;
     }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
@@ -727,15 +729,17 @@ _CONSOLE_BODY = (
     )
     + """
     <div class="stack">
-      <section class="card" id="registry-card">
-        <div class="panel-head">
-          <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
-          <div class="btn-row">
-            <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
-            <button id="new-list-toggle" class="btn btn-sm btn-primary" aria-expanded="false" aria-controls="new-list-form">New status list</button>
-          </div>
+      <div id="registry">
+        <div class="test-table-wrap">
+          <table class="test-table">
+            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
+            <tbody id="registry-rows"></tbody>
+          </table>
         </div>
-        <p class="text-sm text-muted" id="ctx-scope">No list selected yet: click a list to operate on it.</p>
+        <div class="btn-row mt-4">
+          <button id="registry-refresh" class="btn btn-md btn-outline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Refresh lists</button>
+          <button id="new-list-toggle" class="btn btn-md btn-primary" aria-expanded="false" aria-controls="new-list-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New status list</button>
+        </div>
         <div id="new-list-form" class="mt-4" hidden>
           <div class="batch-fields">
             <div>
@@ -756,13 +760,7 @@ _CONSOLE_BODY = (
             <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
           </div>
         </div>
-        <div class="test-table-wrap mt-4">
-          <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
-            <tbody id="registry-rows"></tbody>
-          </table>
-        </div>
-      </section>
+      </div>
 
       <section class="card" id="working-card" aria-labelledby="working-title" hidden>
         <div class="panel-head">
@@ -992,7 +990,6 @@ _SHARED_SCRIPT = """<script>
 
 _CONSOLE_SCRIPT = """<script>
     const registryRows = document.querySelector("#registry-rows");
-    const registryCount = document.querySelector("#registry-count");
     const allocationRows = document.querySelector("#allocation-rows");
     const allocationCount = document.querySelector("#allocation-count");
     const workingCard = document.querySelector("#working-card");
@@ -1087,7 +1084,6 @@ _CONSOLE_SCRIPT = """<script>
     // The registry is both the inventory and the chooser: clicking a row makes
     // that list the working list.
     function renderRegistry() {
-      registryCount.textContent = registry.length;
       registryRows.innerHTML = registry.length
         ? registry.map((item) => `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}"${item.status_list_uri === activeListUri ? ' aria-current="true"' : ""}>
             <td class="cell-mono">${escapeHtml(item.country)}</td>
@@ -1100,11 +1096,10 @@ _CONSOLE_SCRIPT = """<script>
         : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
     }
 
-    // The working-list card follows the chosen list; the hint shows until one is chosen.
+    // The working-list card follows the chosen list.
     function renderContext() {
       const pool = workingPool();
       workingCard.hidden = !pool;
-      document.querySelector("#ctx-scope").hidden = Boolean(pool);
       if (pool) {
         document.querySelector("#working-title").textContent = `${pool.country} · ${pool.doctype}`;
         document.querySelector("#working-meta").textContent =

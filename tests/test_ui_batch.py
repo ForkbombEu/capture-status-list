@@ -39,8 +39,8 @@ def test_console_shows_the_working_list_in_tabs() -> None:
     assert '<section class="page-section" aria-labelledby="console-title">\n    <div class="container">' in html
     # The console shares the brand max-width so it lines up with the header.
     assert "console-container" not in html
-    # Lists, then one working-list card whose views are tabs.
-    assert html.index('id="registry-card"') < html.index('id="working-card"')
+    # The list table, then one working-list card whose views are tabs.
+    assert html.index('id="registry-rows"') < html.index('id="working-card"')
     assert html.index('id="working-card"') < html.index('id="entries-panel"')
     assert html.index('id="entries-panel"') < html.index('id="token-panel"')
     assert html.index('id="token-panel"') < html.index('id="key-panel"')
@@ -85,13 +85,14 @@ def test_registry_inventory_carries_no_row_actions() -> None:
 def test_console_declares_the_working_list_context() -> None:
     html = client.get("/").text
 
-    assert '<h3 class="subsection-heading">Country × doctype lists' in html
     assert "registryRows.onclick = chooseRow" in html
-    assert 'id="ctx-scope"' in html
-    # Pools are created from the primary button that opens a form on demand.
-    assert 'id="new-list-toggle" class="btn btn-sm btn-primary"' in html
-    assert 'id="new-list-form" class="mt-4" hidden' in html
-    assert 'id="new-list" class="btn btn-md btn-primary"' in html
+    # The list table stands on the page with no card; its actions sit beneath
+    # it, and pools are created from the primary button that opens a form.
+    registry = html[html.index('id="registry"') : html.index('id="working-card"')]
+    assert registry.index('id="registry-rows"') < registry.index('id="registry-refresh"')
+    assert 'id="new-list-toggle" class="btn btn-md btn-primary"' in registry
+    assert 'id="new-list-form" class="mt-4" hidden' in registry
+    assert 'id="new-list" class="btn btn-md btn-primary"' in registry
     # The working-list card stays hidden until a list is chosen; its Entries tab
     # tops the list up and lists the entries, whose country, doctype and URI
     # live in the card title and the Token tab rather than in every row.

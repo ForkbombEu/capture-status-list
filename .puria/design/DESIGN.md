@@ -700,6 +700,15 @@ inside a `.test-table-wrap` renders them.
 </div>
 ```
 
+### Scrollbars
+
+Every scrollable surface uses Credimi's scrollbar, as credimi.io does: a 10px
+pill in `--brand-primary`, inset 2px on a transparent track, that lightens to
+85% indigo under the pointer. `brand/style.css` sets it for the whole page,
+through the `::-webkit-scrollbar` pseudo-elements in Blink and WebKit and
+`scrollbar-color` in Firefox. On an indigo surface, add `.scrollbar-on-dark`
+for a translucent white thumb.
+
 ### Inputs
 
 - 36px tall, 10px radius, 1px hairline border, white background.

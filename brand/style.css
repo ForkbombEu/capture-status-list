@@ -903,6 +903,50 @@ input::placeholder {
   border-bottom-color: var(--brand-primary);
 }
 
+/* --- Scrollbars (DESIGN.md §11 Scrollbars) ---
+   Credimi's scrollbar, as on credimi.io: a 10px indigo pill on a transparent
+   track, inset 2px, lighter under the pointer. Blink and WebKit draw it from
+   the pseudo-elements; Firefox, which has none, from scrollbar-color. Blink
+   ignores the pseudo-elements once scrollbar-color is set, hence the guard. */
+:root {
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: var(--brand-primary);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--brand-primary) 85%, white);
+  --scrollbar-track: transparent;
+}
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  background: transparent;
+}
+
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+
+::-webkit-scrollbar-corner { background: transparent; }
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+}
+
+/* On indigo surfaces the thumb turns translucent white. */
+.scrollbar-on-dark {
+  --scrollbar-thumb: rgba(255,255,255,0.35);
+  --scrollbar-thumb-hover: rgba(255,255,255,0.55);
+}
+
 /* --- Utilities --- */
 .flex { display: flex; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; }

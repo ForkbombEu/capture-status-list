@@ -70,16 +70,13 @@ def test_footer_links_to_the_repository() -> None:
 def test_registry_inventory_carries_no_row_actions() -> None:
     html = client.get("/").text
 
-    # The inventory lists the country × doctype pools; a click on a row
-    # chooses it, and the raw token previews are gone with the buttons.
+    # The inventory lists the country × doctype pools, scoreboard style: one
+    # List column (name, state and counts) plus the UUID and expiry. A click on
+    # a row chooses it; the raw token previews are gone with the buttons.
     assert 'data-preview=' not in html
     assert 'data-work-uri=' not in html
     assert "<th>Token formats</th>" not in html
-    assert (
-        "<thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th>"
-        "<th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>"
-        in html
-    )
+    assert "<thead><tr><th>List</th><th>List UUID</th><th>Expiry</th></tr></thead>" in html
 
 
 def test_console_declares_the_working_list_context() -> None:

@@ -141,14 +141,44 @@ APP_CSS = """
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
 
-    /* Tables stand on a white, hairline-bordered surface: on the lavender wash
-       their transparent rows would melt into the page. */
+    /* Tables follow the Credimi scoreboard (credimi.io/scoreboard): a white 6px
+       surface on the lavender wash, a lavender header band with small uppercase
+       indigo labels, and hairline rows. */
     .table-surface {
       overflow: auto;
-      border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--bg);
     }
+    .table-surface .test-table th {
+      height: 40px;
+      padding: 0 var(--space-3);
+      border-bottom: 0;
+      background: var(--brand-secondary-strong);
+      color: var(--brand-primary);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+    }
+    .table-surface .test-table td { padding: var(--space-3); }
+    .table-surface .test-table tbody tr:last-child td { border-bottom: 0; }
+    /* The scoreboard's two-line first cell: the list's name, then its state
+       pill and counts. */
+    .list-name {
+      display: block;
+      color: var(--brand-primary);
+      font-size: var(--fs-base);
+      font-weight: 600;
+    }
+    .list-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      margin-top: var(--space-1);
+      color: var(--fg-muted);
+      font-size: var(--fs-xs);
+    }
+    .list-meta .status-chip { height: 20px; padding: 0 var(--space-2); }
     .entries-scroll { max-height: 420px; }
     .entries-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
@@ -511,13 +541,16 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
-    /* The registry is the chooser: clicking a row makes it the working list. The
-       chosen row takes the stronger lavender so it stands apart from the hover. */
+    /* The registry is the chooser: clicking a row makes it the working list.
+       Rows top-align like the scoreboard; the chosen row takes the soft
+       lavender and an indigo edge, apart from both the hover and the header. */
     .registry-row { cursor: pointer; }
+    .registry-row td { vertical-align: top; }
+    .registry-row td.cell-mono { line-height: 20px; }
     .registry-row:hover td { background: var(--bg-muted); }
-    .registry-row[aria-current="true"] td {
-      background: var(--brand-secondary-strong);
-      font-weight: 600;
+    .registry-row[aria-current="true"] td { background: var(--brand-secondary); }
+    .registry-row[aria-current="true"] td:first-child {
+      box-shadow: inset 3px 0 0 var(--brand-primary);
     }
     .registry-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
     /* The JWKS wraps so the key's long x5c certificate stays readable. */
@@ -735,7 +768,7 @@ _CONSOLE_BODY = (
       <div id="registry">
         <div class="test-table-wrap table-surface">
           <table class="test-table">
-            <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
+            <thead><tr><th>List</th><th>List UUID</th><th>Expiry</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
@@ -1051,6 +1084,11 @@ _CONSOLE_SCRIPT = """<script>
       return registry.find((item) => item.status_list_uri === activeListUri) || null;
     }
 
+    // Dates read DD/MM/YYYY (DESIGN.md §15).
+    function formatDate(iso) {
+      return iso ? iso.split("-").reverse().join("/") : "—";
+    }
+
     // The Entries tab is the working list's own inventory.
     function renderAllocations() {
       const entries = allocations.filter((item) => item.status_list_uri === activeListUri);
@@ -1061,7 +1099,7 @@ _CONSOLE_SCRIPT = """<script>
             const revoked = item.status === "REVOKED";
             return `<tr class="${state}">
               <td class="cell-mono">${item.idx}</td>
-              <td class="cell-mono">${escapeHtml(item.expiry_date)}</td>
+              <td class="cell-mono">${escapeHtml(formatDate(item.expiry_date))}</td>
               <td><span class="status-chip status-${state}">${escapeHtml(item.status)}</span></td>
               <td>
                 <button class="btn btn-sm btn-destructive" type="button" data-allocation-uri="${escapeHtml(item.status_list_uri)}" data-allocation-idx="${item.idx}" aria-label="Revoke entry ${item.idx}" ${revoked ? "disabled" : ""}>Revoke</button>
@@ -1089,14 +1127,14 @@ _CONSOLE_SCRIPT = """<script>
     function renderRegistry() {
       registryRows.innerHTML = registry.length
         ? registry.map((item) => `<tr class="registry-row" tabindex="0" data-list="${escapeHtml(item.status_list_uri)}"${item.status_list_uri === activeListUri ? ' aria-current="true"' : ""}>
-            <td class="cell-mono">${escapeHtml(item.country)}</td>
-            <td class="cell-mono">${escapeHtml(item.doctype)}</td>
+            <td>
+              <span class="list-name">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)}</span>
+              <span class="list-meta"><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span>${item.allocated} allocated · ${item.revoked} revoked</span>
+            </td>
             <td class="cell-mono">${escapeHtml(item.list_id)}</td>
-            <td>${item.allocated}</td><td>${item.revoked}</td>
-            <td class="cell-mono">${escapeHtml(item.expires || "—")}</td>
-            <td><span class="status-chip status-${item.expired ? "revoked" : "valid"}">${item.expired ? "EXPIRED" : "ACTIVE"}</span></td>
+            <td class="cell-mono">${escapeHtml(formatDate(item.expires))}</td>
           </tr>`).join("")
-        : `<tr class="empty-row"><td colspan="7">No country × doctype list allocated yet.</td></tr>`;
+        : `<tr class="empty-row"><td colspan="3">No country × doctype list allocated yet.</td></tr>`;
     }
 
     // The working-list card follows the chosen list.
@@ -1107,7 +1145,7 @@ _CONSOLE_SCRIPT = """<script>
         document.querySelector("#working-title").textContent = `${pool.country} · ${pool.doctype}`;
         document.querySelector("#working-meta").textContent =
           `${pool.allocated} allocated · ${pool.revoked} revoked · ` +
-          (pool.expired ? "expired" : `expires ${pool.expires || "—"}`);
+          (pool.expired ? "expired" : `expires ${formatDate(pool.expires)}`);
         const link = document.querySelector("#lst-uri");
         link.href = pool.status_list_uri;
         document.querySelector("#lst-uri-text").textContent = pool.status_list_uri;

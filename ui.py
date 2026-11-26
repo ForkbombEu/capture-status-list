@@ -141,13 +141,15 @@ APP_CSS = """
       transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
     }
 
-    .entries-scroll {
-      max-height: 420px;
+    /* Tables stand on a white, hairline-bordered surface: on the lavender wash
+       their transparent rows would melt into the page. */
+    .table-surface {
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--bg);
     }
+    .entries-scroll { max-height: 420px; }
     .entries-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;
@@ -307,6 +309,7 @@ APP_CSS = """
       stroke-linecap: round;
       stroke-linejoin: round;
     }
+    .btn-lg svg { width: 16px; height: 16px; }
     .legend-header { background: var(--brand-primary); }
     .legend-payload { background: var(--brand-accent-vivid); }
     .legend-signature { background: var(--credential); }
@@ -508,8 +511,8 @@ APP_CSS = """
       color: var(--fg);
       font: var(--fs-base) var(--font-sans);
     }
-    /* The registry is the chooser: clicking a row makes it the working list. It
-       sits on the lavender wash, so the chosen row takes the stronger lavender. */
+    /* The registry is the chooser: clicking a row makes it the working list. The
+       chosen row takes the stronger lavender so it stands apart from the hover. */
     .registry-row { cursor: pointer; }
     .registry-row:hover td { background: var(--bg-muted); }
     .registry-row[aria-current="true"] td {
@@ -730,15 +733,15 @@ _CONSOLE_BODY = (
     + """
     <div class="stack">
       <div id="registry">
-        <div class="test-table-wrap">
+        <div class="test-table-wrap table-surface">
           <table class="test-table">
             <thead><tr><th>Country</th><th>Doctype</th><th>List UUID</th><th>Allocated</th><th>Revoked</th><th>Expiry</th><th>State</th></tr></thead>
             <tbody id="registry-rows"></tbody>
           </table>
         </div>
         <div class="btn-row mt-4">
-          <button id="registry-refresh" class="btn btn-md btn-outline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Refresh lists</button>
-          <button id="new-list-toggle" class="btn btn-md btn-primary" aria-expanded="false" aria-controls="new-list-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New status list</button>
+          <button id="registry-refresh" class="btn btn-lg btn-outline"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Refresh lists</button>
+          <button id="new-list-toggle" class="btn btn-lg btn-primary" aria-expanded="false" aria-controls="new-list-form"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New status list</button>
         </div>
         <div id="new-list-form" class="mt-4" hidden>
           <div class="batch-fields">
@@ -756,8 +759,8 @@ _CONSOLE_BODY = (
             </div>
           </div>
           <div class="btn-row mt-4">
-            <button id="new-list" class="btn btn-md btn-primary">Create status list</button>
-            <button id="new-list-cancel" class="btn btn-md btn-outline">Cancel</button>
+            <button id="new-list" class="btn btn-lg btn-primary">Create status list</button>
+            <button id="new-list-cancel" class="btn btn-lg btn-outline">Cancel</button>
           </div>
         </div>
       </div>
@@ -790,7 +793,7 @@ _CONSOLE_BODY = (
           <div class="btn-row mt-4 mb-4">
             <button id="add-entries" class="btn btn-md btn-secondary">Add entries to this list</button>
           </div>
-          <div class="entries-scroll">
+          <div class="table-surface entries-scroll">
             <div class="test-table-wrap">
               <table class="test-table">
                 <thead><tr><th>Index</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
@@ -1327,8 +1330,8 @@ _EXPLORER_BODY = (
           </div>
         </div>
         <div class="btn-row mt-4">
-          <button id="explore" class="btn btn-md btn-primary">Inspect payload</button>
-          <button id="explore-current" class="btn btn-md btn-outline">Load this server's status list</button>
+          <button id="explore" class="btn btn-lg btn-primary">Inspect payload</button>
+          <button id="explore-current" class="btn btn-lg btn-outline">Load this server's status list</button>
         </div>
         <pre class="output mt-4" id="explore-out">Paste a payload, then inspect it.</pre>
     </div>

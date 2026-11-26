@@ -63,3 +63,8 @@ If unsure:
 - location: `mise.toml` `[tasks.format]`; `PURIA.md` "Git Behavior" pre-commit validation
 - evidence: `mise.toml` format task is `gofmt -w .` only; CI (`ci.yml`) runs `mise run fix` (Go) but no Python format/lint step; pytest is the only Python validation.
 - rationale: Python commits cannot satisfy the "run the repository-defined formatter" requirement as written. A human should decide whether to add a Python formatter task (e.g., `ruff format` / `black`) to `mise.toml` and CI.
+- id: hitl-0003
+- observation: The design specification and the brand stylesheet, both copied verbatim from `credimi-extras-template`, disagree on button metrics.
+- location: `.puria/design/DESIGN.md` §11 "Buttons"; `brand/style.css` `.btn`, `.btn-md`, `.btn-lg`
+- evidence: DESIGN.md gives sizes `sm` 28px, `md` 40px (default), `lg` 48px, a 6px radius and a 500 label; style.css sets `.btn-md` 36px, `.btn-lg` 44px, `--radius-lg` (10px) and font-weight 600. The template's own §11 form-row example uses `btn-lg` for a form's primary action.
+- rationale: Both files are authoritative and frozen to the template here, so this repository follows the stylesheet and uses `btn-lg` for page-level actions. A human should decide which value is canonical and fix it upstream in `credimi-extras-template`.

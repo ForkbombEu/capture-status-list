@@ -179,7 +179,18 @@ APP_CSS = """
       font-size: var(--fs-xs);
     }
     .list-meta .status-chip { height: 20px; padding: 0 var(--space-2); }
-    .entries-scroll { max-height: 420px; overflow: auto; border-radius: var(--radius); }
+    /* The entries table scrolls under its sticky 40px header band (brand
+       `.test-table th`), so its scrollbar track starts below the band, and the
+       box's top 40px take the band's lavender to fill the gutter beside it: a
+       flat fill with a hard stop, not a visible gradient. Firefox has no track
+       margin; there the thin bar runs alongside the header. */
+    .entries-scroll {
+      max-height: 420px;
+      overflow: auto;
+      border-radius: var(--radius);
+      background: linear-gradient(var(--brand-secondary-strong) 40px, var(--bg) 40px);
+    }
+    .entries-scroll::-webkit-scrollbar-track { margin-top: 40px; }
     .entries-scroll .test-table-wrap { overflow: visible; }
     input[type="number"]:focus {
       outline: none;

@@ -13,7 +13,6 @@ layouts and behaviours absent from the brand foundation are declared here.
 BRAND_ROOT = "/brand"
 STYLE_HREF = f"{BRAND_ROOT}/style.css"
 LOGO_MARK = f"{BRAND_ROOT}/logos/credimi_logo.svg"
-LOGO_WORDMARK = f"{BRAND_ROOT}/logos/credimi_logo-transp.svg"
 LOGO_WORDMARK_WHITE = f"{BRAND_ROOT}/logos/credimi_logo-transp_white.svg"
 CREDIMI_URL = "https://credimi.io"
 # `POST /token_status_list/take` answers a browser GET with 405, so its links
@@ -82,8 +81,28 @@ APP_CSS = """
 
     .footer-brand h5 { color: var(--fg-on-primary); margin-bottom: var(--space-2); }
 
-    /* Logo links carry no underline: the brand rule underlines every anchor. */
-    .topbar-logo { display: block; text-decoration: none; }
+    /* Topbar lockup: the Credimi mark at its 32px minimum (DESIGN.md §4), then
+       the service name. Logo links carry no underline: the brand rule
+       underlines every anchor. */
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      height: auto;
+      color: var(--fg);
+      text-decoration: none;
+    }
+    .topbar-logo img { width: 32px; height: 32px; }
+    .topbar-title {
+      font: 700 var(--fs-md)/1 var(--font-display);
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    /* Below 480px the name and the nav no longer fit the 56px bar side by side;
+       the mark alone stays as the home link. */
+    @media (max-width: 480px) {
+      .topbar-title { display: none; }
+    }
     .extras-bottom a { text-decoration: none; }
 
     /* Grid items default to min-width:auto, so the table's own min-width would
@@ -582,7 +601,6 @@ def _topbar(active: str) -> str:
         ("Console", "/"),
         ("Explorer", "/explorer"),
         ("API docs", "/docs"),
-        ("Status list API", TAKE_DOCS_HREF),
     )
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
@@ -595,7 +613,7 @@ def _topbar(active: str) -> str:
     )
     return f"""  <nav class="topbar">
     <div class="topbar-inner">
-      <a class="topbar-logo" href="/"><img src="{LOGO_WORDMARK}" alt="Credimi"></a>
+      <a class="topbar-logo" href="/"><img src="{LOGO_MARK}" alt="Credimi"><span class="topbar-title">Token status list</span></a>
       <ul class="topbar-nav">
 {items}
       </ul>
@@ -692,8 +710,8 @@ def _hero_band(title: str, description: str) -> str:
 _CONSOLE_BODY = (
     _hero_band(
         "Token status list console",
-        "Allocate country × doctype status lists, revoke their entries, and inspect the"
-        " signed Status List Token.",
+        "A test server for EUDI Wallet conformance: IETF Token Status Lists per country"
+        " and doctype, in JWT and CWT, each paired with an ISO 18013-5 identifier list.",
     )
     + """
   <main>
@@ -703,9 +721,9 @@ _CONSOLE_BODY = (
     + _section_intro(
         2,
         "console-title",
-        "Registry debugger",
-        "Paired country × doctype Token Status Lists and ISO 18013-5 identifier lists,"
-        " in JWT and CWT forms.",
+        "Browse the status lists",
+        "Pick a list to add or revoke entries, read its signed token, and check the key"
+        " that signs it.",
     )
     + """
     <div class="stack">

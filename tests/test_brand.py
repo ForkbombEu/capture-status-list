@@ -82,7 +82,11 @@ def test_every_html_page_carries_the_brand_chrome() -> None:
         assert page.headers["content-type"].startswith("text/html"), path
         assert '<link rel="stylesheet" href="/brand/style.css">' in page.text, path
         assert '<link rel="icon" type="image/svg+xml" href="/favicon.svg">' in page.text, path
-        assert '<img src="/brand/logos/credimi_logo-transp.svg" alt="Credimi">' in page.text, path
+        # The topbar lockup is the Credimi mark followed by the service name.
+        assert (
+            '<img src="/brand/logos/credimi_logo.svg" alt="Credimi">'
+            '<span class="topbar-title">Token status list</span>'
+        ) in page.text, path
         assert "Proudly developed by ForkBomb BV" in page.text, path
 
 

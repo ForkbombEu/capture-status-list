@@ -621,6 +621,10 @@ static `--bg-muted` blocks.
 
 ## 11. Components
 
+Every component honours the `hidden` attribute: `brand/style.css` sets
+`[hidden] { display: none !important; }`, so a component's own `display` never
+reveals an element the page hid.
+
 ### Buttons
 
 | Variant | Use case | Fill | Text |
@@ -649,7 +653,26 @@ same update so the two agree again.
 
 Alerts are 1px-bordered, 8px-radius rectangles with a 60% white background
 (`rgba(255,255,255,0.6)`), 17px padding, a 500/16 heading + 400/14 body, and an
-18×18 Lucide icon in the top-left.
+18×18 Lucide icon in the top-left. An action, usually a ghost "Dismiss" button,
+closes the row.
+
+Inline, an alert sits at the top of the region it concerns. As feedback to an
+action it floats (`.alert-floating`): solid white with `--shadow-lg` in the
+bottom-right corner, until the user dismisses it or starts the next action.
+Failures and hints go to an alert, never to an output or log box in the page. A
+successful action shows its result where it happened, and needs an alert only
+when it has no visible result.
+
+```html
+<div class="alert alert-destructive alert-floating" role="alert">
+  <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">…triangle-alert…</svg>
+  <div>
+    <p class="alert-title">The action failed</p>
+    <p class="alert-body">The list has 3 free entries left.</p>
+  </div>
+  <button class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+</div>
+```
 
 ### Popovers / MegaMenu
 
@@ -711,8 +734,18 @@ for a translucent white thumb.
 
 ### Inputs
 
-- 36px tall, 10px radius, 1px hairline border, white background.
-- Focus: `border-color: var(--brand-primary)` + 3px indigo ring at 18% alpha.
+Two sizes, by where the input lives:
+
+- **Form fields** (`.form-field`, see [Form row](#form-row)): every control
+  (text, number, date, select, textarea) is 44px tall, `--radius` (6px), 1px
+  `--border-strong`, white, with a 600/14 value; a textarea starts at 96px and
+  resizes vertically only. Focus: a 2px `--ring` outline, 2px offset.
+- **Search and toolbar inputs**: 36px tall, 10px radius, 1px hairline border,
+  white background. Focus: `border-color: var(--brand-primary)` + 3px indigo
+  ring at 18% alpha.
+- A file picker is a button: a `<label class="btn btn-outline btn-lg btn-file">`
+  wrapping the native file input, which stays focusable and out of sight; the
+  button shows the focus ring.
 - Placeholder copy uses sentence case + trailing colon:
   `Find applications, features and services:`
 
@@ -757,7 +790,9 @@ that points down when closed and up when open.
 A form's controls on one row with the primary button last, on the right. Each
 field carries its label above it as a `.subsection-heading`, so the row aligns
 on the bottom. The button names the action in one word where it can ("Start",
-"Issue", "Verify"). On mobile every control takes the full width.
+"Issue", "Verify"). A fixed-width field takes `.form-field-sm` (140px) or
+`.form-field-md` (200px); one `.form-field-grow` takes the rest. On mobile every
+control takes the full width.
 
 ```html
 <div class="form-row">

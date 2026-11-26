@@ -154,6 +154,10 @@
 /* --- Reset & Base --- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* An element with the hidden attribute stays hidden whatever display its component
+   class sets (DESIGN.md §11), so no component needs its own [hidden] rule. */
+[hidden] { display: none !important; }
+
 /*
   Inter and Source Code Pro are vendored in brand/fonts/ (SIL OFL 1.1) and
   declared above. Keep the runtime copies next to this file so the relative
@@ -555,7 +559,7 @@ pre {
   margin-bottom: var(--space-2);
 }
 
-/* --- Inputs --- */
+/* --- Inputs: search and toolbar (36px); form-field controls are under Form row --- */
 input[type="text"],
 input[type="search"] {
   font-family: var(--font-sans);
@@ -1062,7 +1066,6 @@ input::placeholder {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3);
 }
-.link-cards[hidden] { display: none; }
 .link-card {
   position: relative;
   display: grid;
@@ -1166,6 +1169,40 @@ a.link-card::after {
   font: 600 var(--fs-base) var(--font-sans);
 }
 .form-field select:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+.form-row > .form-field-sm { flex: 0 0 140px; }
+.form-row > .form-field-md { flex: 0 0 200px; }
+/* Every control in a form field matches the select: 44px, --radius, --border-strong
+   and a 600 value; a textarea starts at 96px and resizes vertically only. */
+.form-field input:not([type="radio"]):not([type="checkbox"]),
+.form-field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: 600 var(--fs-base) var(--font-sans);
+  box-shadow: none;
+}
+.form-field textarea {
+  min-height: 96px;
+  padding: var(--space-3) 14px;
+  font-weight: 400;
+  line-height: var(--lh-base);
+  resize: vertical;
+}
+.form-field input:not([type="radio"]):not([type="checkbox"]):focus,
+.form-field textarea:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+/* A file picker as a button: the label carries the button classes and wraps the
+   native input, which stays focusable and out of sight; the label shows the ring. */
+.btn-file { position: relative; }
+.btn-file:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 /* --- Segmented control ---
    One choice out of a few, such as a flow: a rounded rectangle whose checked segment
@@ -1254,9 +1291,10 @@ a.link-card::after {
   color: var(--fg-muted);
 }
 
-/* Shared by the segmented control and the switch: the native input keeps focus and form
-   submission while staying out of sight. */
+/* Shared by the segmented control, the switch and the file button: the native input
+   keeps focus and form submission while staying out of sight. */
 .segmented input,
+.btn-file input,
 .switch input {
   position: absolute;
   width: 1px;
@@ -1306,6 +1344,56 @@ a.link-card::after {
   a.link-card { transition: none; }
 }
 
+/* --- Alerts (DESIGN.md §11 Alerts) ---
+   A bordered note in its variant's color: an 18px Lucide icon, a 500/16 title and a
+   400/14 body, with an optional action (a ghost Dismiss) at the end of the row. Inline
+   alerts sit on 60% white; a floating alert is action feedback, solid white over the
+   page in the bottom-right corner until dismissed. */
+.alert {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: 17px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.6);
+}
+.alert-success { color: var(--success-border); }
+.alert-destructive { color: var(--destructive); }
+.alert-info { color: var(--brand-primary); }
+.alert-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.alert-title { font: 500 var(--fs-md)/1.25 var(--font-sans); }
+.alert-body {
+  margin-top: var(--space-1);
+  font: 400 var(--fs-base)/var(--lh-base) var(--font-sans);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.alert .btn-ghost { color: var(--fg); }
+.alert-floating {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 200;
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+  background: var(--bg);
+  box-shadow: var(--shadow-lg);
+  animation: alert-in 220ms ease-out;
+}
+.alert-floating .alert-body { max-height: 40vh; overflow: auto; }
+@keyframes alert-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .alert-floating { animation: none; } }
+
 /* --- Responsive --- */
 @media (max-width: 768px) {
   :root {
@@ -1328,7 +1416,10 @@ a.link-card::after {
   .page-section { padding: var(--space-16) 0; }
   .hero-band { padding: var(--space-16) 0 var(--space-12); }
   .link-cards { grid-template-columns: 1fr; }
-  .form-row > * { flex: 1 1 100%; }
+  .form-row > *,
+  .form-row > .form-field-sm,
+  .form-row > .form-field-md { flex: 1 1 100%; }
+  .alert-floating { right: var(--space-4); bottom: var(--space-4); }
   .panel-head { flex-direction: column; align-items: stretch; }
 }
 

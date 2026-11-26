@@ -49,7 +49,7 @@ def test_console_shows_the_working_list_in_tabs() -> None:
     assert '<li><a href="/.well-known/jwks.json">TSL JWKS</a></li>' in html
     assert 'id="token-panel" aria-labelledby="tab-token" hidden' in html
     # Failures float in one dismissible alert instead of an output panel.
-    assert 'id="notice" class="notice" role="alert" hidden' in html
+    assert 'id="notice" class="alert alert-floating" role="alert" hidden' in html
 
 
 def test_page_sections_keep_the_container_side_gutter() -> None:

@@ -109,46 +109,7 @@ APP_CSS = """
        widen the whole page instead of scrolling inside its wrapper. */
     .stack { display: grid; gap: var(--space-6); }
     .stack > *, .card-grid > * { min-width: 0; }
-    /* Form rows (DESIGN.md §11): each label sits above its control as a
-       sub-heading, controls match the brand's 44px form-row select, and the
-       primary button closes the row. Narrow fields keep their width, a grow
-       field takes the rest, and on phones every control takes the full width. */
-    .form-row > .form-field-sm { flex: 0 0 140px; }
-    .form-row > .form-field-md { flex: 0 0 200px; }
-    .form-row .form-field input {
-      width: 100%;
-      min-height: 44px;
-      padding: 0 var(--space-3);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--bg);
-      color: var(--fg);
-      font: 600 var(--fs-base) var(--font-sans);
-      box-shadow: none;
-    }
-    .form-row .form-field input:focus {
-      outline: 2px solid var(--ring);
-      outline-offset: 2px;
-      border-color: var(--border-strong);
-      box-shadow: none;
-    }
-    @media (max-width: 768px) {
-      .form-row > .form-field-sm,
-      .form-row > .form-field-md { flex: 1 1 100%; }
-    }
     .test-table-wrap { max-width: 100%; }
-    input[type="number"] {
-      font-family: var(--font-sans);
-      font-size: var(--fs-base);
-      height: 36px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
-      width: 100%;
-      transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
-    }
 
     /* Tables are the brand's Scoreboard pattern (`.test-table`, DESIGN.md §11
        Tables); the console only adds the registry's two-line first cell. */
@@ -186,64 +147,12 @@ APP_CSS = """
     }
     .entries-scroll::-webkit-scrollbar-track { margin-top: 40px; }
     .entries-scroll .test-table-wrap { overflow: visible; }
-    input[type="number"]:focus {
-      outline: none;
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px oklch(0.2955 0.1659 277.31 / 0.18);
-    }
 
     .btn-secondary {
       background: var(--brand-secondary-deep);
       color: var(--brand-primary);
     }
     .btn-secondary:hover { background: var(--brand-secondary-strong); }
-    /* Action feedback: one alert (DESIGN.md §11) floating like a toast in the
-       bottom-right corner until dismissed; successful actions show their result
-       in the panels. Solid white rather than 60%, since it floats over content. */
-    .notice {
-      position: fixed;
-      right: var(--space-6);
-      bottom: var(--space-6);
-      z-index: 200;
-      display: grid;
-      grid-template-columns: 18px minmax(0, 1fr) auto;
-      gap: var(--space-3);
-      align-items: start;
-      width: min(440px, calc(100vw - 2 * var(--space-4)));
-      padding: 17px;
-      border: 1px solid currentColor;
-      border-radius: var(--radius-md);
-      background: var(--bg);
-      box-shadow: var(--shadow-lg);
-      animation: notice-in 220ms ease-out;
-    }
-    .notice[hidden] { display: none; }
-    .notice-destructive { color: var(--destructive); }
-    .notice-info { color: var(--brand-primary); }
-    .notice-icon {
-      width: 18px;
-      height: 18px;
-      margin-top: 1px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .notice-destructive .notice-icon-info,
-    .notice-info .notice-icon-destructive { display: none; }
-    .notice-title { font: 500 var(--fs-md)/1.25 var(--font-sans); }
-    .notice-body {
-      margin-top: var(--space-1);
-      font-size: var(--fs-base);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      max-height: 40vh;
-      overflow: auto;
-    }
-    .notice .btn-ghost { color: var(--fg); }
-    @keyframes notice-in { from { opacity: 0; transform: translateY(8px); } }
-    @media (prefers-reduced-motion: reduce) { .notice { animation: none; } }
     /* A disabled action keeps its label and turns muted: a revoked entry still
        reads "Revoke", greyed out. */
     .btn:disabled,
@@ -486,36 +395,15 @@ APP_CSS = """
       font-weight: 600;
     }
 
-    /* Explorer: the payload textarea matches the form-row controls, the bits
-       setting waits in an Advanced disclosure, and the file picker is a button
-       whose native input stays focusable but out of sight. */
-    .payload-input {
-      display: block;
-      width: 100%;
+    /* Explorer: the brand styles the payload textarea as a form-field control;
+       here it is taller and set in monospace for tokens. */
+    .form-field .payload-input {
       min-height: 160px;
-      padding: var(--space-3);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--bg);
-      color: var(--fg);
       font: var(--fs-sm)/1.5 var(--font-mono);
-      resize: vertical;
       word-break: break-all;
     }
-    .payload-input:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
     .disclosure-body { padding: var(--space-4); }
     .bits-segmented { max-width: 320px; }
-    .btn-row[hidden] { display: none; }
-    .file-button { position: relative; }
-    .file-button input {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-    .file-button:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
     /* A token without an encoded form to show (CWT, JSON) keeps one column. */
     .jwt-columns-single { grid-template-columns: 1fr; }
     /* The registry is the chooser: clicking a row opens that list's panel under
@@ -748,12 +636,12 @@ def _hero_band(title: str, description: str) -> str:
 # The one alert every page reports failures and hints in (DESIGN.md §11
 # Alerts); the shared script's notify() fills and shows it.
 _NOTICE = """
-      <div id="notice" class="notice" role="alert" hidden>
-        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      <div id="notice" class="alert alert-floating" role="alert" hidden>
+        <svg class="alert-icon" data-kind="destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg class="alert-icon" data-kind="info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
         <div>
-          <p class="notice-title" id="notice-title"></p>
-          <p class="notice-body" id="notice-body"></p>
+          <p class="alert-title" id="notice-title"></p>
+          <p class="alert-body" id="notice-body"></p>
         </div>
         <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
       </div>
@@ -951,7 +839,9 @@ _SHARED_SCRIPT = """<script>
     }
 
     function notify(value, kind = "destructive", title = kind === "info" ? "Nothing selected" : "The action failed") {
-      notice.className = `notice notice-${kind}`;
+      notice.className = `alert alert-floating alert-${kind}`;
+      // Only this kind's icon shows; SVG elements have no .hidden property.
+      notice.querySelectorAll(".alert-icon").forEach((icon) => icon.toggleAttribute("hidden", icon.dataset.kind !== kind));
       document.querySelector("#notice-title").textContent = title;
       document.querySelector("#notice-body").textContent = describe(value);
       notice.hidden = false;
@@ -1430,7 +1320,7 @@ _EXPLORER_BODY = (
           <span class="subsection-heading">Load from this server</span>
           <select id="explore-server"><option value="">Choose a list…</option></select>
         </label>
-        <label class="btn btn-lg btn-outline file-button"><input id="explore-file" type="file">Load a file</label>
+        <label class="btn btn-lg btn-outline btn-file"><input id="explore-file" type="file">Load a file</label>
         <button id="explore" class="btn btn-lg btn-primary" type="button">Inspect</button>
       </div>
     </div>

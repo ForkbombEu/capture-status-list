@@ -699,6 +699,25 @@ On hover: border darkens to `--border-strong`. No `transform` lift.
 The one exception is a **link card**, a whole card that opens a document:
 see below.
 
+### Metric cards
+
+A row of key figures, such as a list's entries and how many are revoked: each
+is a card (above) holding a value in display type (700, `--fs-3xl`,
+`--brand-primary`) above its label in the [eyebrow](#eyebrow-pattern) style.
+Four to a row, two on mobile. Values are measures, so they are sans (see
+[Numbers in display contexts](#numbers-in-display-contexts)); a value that is an
+identifier, such as a version, is monospace.
+
+```html
+<div class="metric-grid">
+  <div class="card">
+    <strong class="metric-value">10000</strong>
+    <span class="eyebrow">Entries</span>
+  </div>
+  …
+</div>
+```
+
 ### Tables
 
 Data tables follow the Scoreboard (`credimi.io/scoreboard`); `.test-table`
@@ -772,16 +791,40 @@ URL is rendered as an `<article>`: hairline border, no arrow, no lift.
 </nav>
 ```
 
+### Tabs
+
+Alternate views of one object, such as a list's entries, its token and its
+decoded content, one visible at a time. Not for moving between pages (that is
+the topbar) or for the steps of a flow. Labels are sentence case, one to three
+words; a count may follow as a chip. The row sits on a hairline; labels are
+500/13 `--fg-muted`, and the selected tab is `--brand-primary` with a 2px
+underline.
+
+Tabs follow the WAI-ARIA tabs pattern: `role="tablist"` around `role="tab"`
+buttons carrying `aria-selected` and `aria-controls`, only the selected tab in
+the tab order, Left and Right arrows moving between tabs, and each
+`role="tabpanel"` hidden while its tab is not selected.
+
+```html
+<div class="tabs" role="tablist" aria-label="List views">
+  <button class="tab-btn" type="button" role="tab" aria-selected="true" aria-controls="entries-panel">Entries</button>
+  <button class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="token-panel" tabindex="-1">Token</button>
+</div>
+<div role="tabpanel" id="entries-panel">…</div>
+<div role="tabpanel" id="token-panel" hidden>…</div>
+```
+
 ### Disclosure
 
 A collapsible panel, such as a form's advanced settings, closed by default. The
 summary is one short word or two ("Advanced") and ends in a chevron in `--fg`
-that points down when closed and up when open.
+that points down when closed and up when open. Its content sits in
+`.disclosure-body`, 16px from the panel's edge.
 
 ```html
 <details class="disclosure">
   <summary>Advanced</summary>
-  …
+  <div class="disclosure-body">…</div>
 </details>
 ```
 

@@ -378,6 +378,21 @@ pre {
 .card-grid-2 { grid-template-columns: repeat(2, 1fr); }
 .card-grid-3 { grid-template-columns: repeat(3, 1fr); }
 
+/* Metric cards (DESIGN.md §11 Metric cards): a value in display type above its
+   eyebrow label, four to a row (two on mobile). */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.metric-value {
+  display: block;
+  font: 700 var(--fs-3xl)/1 var(--font-display);
+  letter-spacing: -0.007em;
+  color: var(--brand-primary);
+  margin-bottom: var(--space-2);
+}
+
 /* --- Section Headers (legacy) ---
    The colon heading. New pages open sections with .section-intro and title panels with
    .panel-head instead (DESIGN.md §8); this stays for existing applications. */
@@ -881,7 +896,9 @@ input::placeholder {
 
 .edit-link:hover { color: var(--brand-primary); border-color: var(--border-strong); }
 
-/* --- Tabs --- */
+/* --- Tabs (DESIGN.md §11 Tabs) ---
+   Alternate views of one object. The selected tab follows aria-selected (or the
+   legacy .active class); keyboard focus shows the ring inside the tab. */
 .tabs {
   display: flex;
   gap: 0;
@@ -902,10 +919,12 @@ input::placeholder {
 }
 
 .tab-btn:hover { color: var(--fg); }
-.tab-btn.active {
+.tab-btn.active,
+.tab-btn[aria-selected="true"] {
   color: var(--brand-primary);
   border-bottom-color: var(--brand-primary);
 }
+.tab-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 
 /* --- Scrollbars (DESIGN.md §11 Scrollbars) ---
    Credimi's scrollbar, as on credimi.io: a 10px indigo pill on a transparent
@@ -1111,7 +1130,8 @@ a.link-card::after {
 
 /* --- Disclosure ---
    A collapsible panel (such as a form's advanced settings), closed by default. Its
-   summary ends in a chevron that points down when closed and up when open. */
+   summary ends in a chevron that points down when closed and up when open; its
+   content sits in .disclosure-body. */
 .disclosure {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -1142,6 +1162,7 @@ a.link-card::after {
 }
 .disclosure[open] > summary { border-bottom: 1px solid var(--border); }
 .disclosure[open] > summary::after { content: '\02C4'; }
+.disclosure-body { padding: var(--space-4); }
 
 /* --- Form row ---
    A form's controls on one row, bottom-aligned because each field carries its label
@@ -1403,6 +1424,7 @@ a.link-card::after {
   }
   .container { padding: 0 var(--space-4); }
   .card-grid-2, .card-grid-3 { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero { padding: var(--space-10) 0; }
   .hero h1 { font-size: var(--fs-3xl); }
   .footer-content { flex-direction: column; gap: var(--space-8); }

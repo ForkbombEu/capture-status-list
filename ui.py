@@ -164,19 +164,6 @@ APP_CSS = """
     .btn-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .btn-row .btn { justify-content: center; }
 
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    .metric-value {
-      display: block;
-      font: 700 var(--fs-3xl)/1 var(--font-display);
-      letter-spacing: -0.007em;
-      color: var(--brand-primary);
-      margin-bottom: var(--space-2);
-    }
-
     .test-table { min-width: 680px; }
     .test-table td { vertical-align: middle; }
     .test-table td.cell-mono {
@@ -402,7 +389,6 @@ APP_CSS = """
       font: var(--fs-sm)/1.5 var(--font-mono);
       word-break: break-all;
     }
-    .disclosure-body { padding: var(--space-4); }
     .bits-segmented { max-width: 320px; }
     /* A token without an encoded form to show (CWT, JSON) keeps one column. */
     .jwt-columns-single { grid-template-columns: 1fr; }
@@ -497,10 +483,6 @@ APP_CSS = """
     .docs-frame .swagger-ui h3,
     .docs-frame .swagger-ui h4,
     .docs-frame .swagger-ui h5 { letter-spacing: normal; }
-
-    @media (max-width: 768px) {
-      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
 """
 
 _EXTRAS_TOP = f"""  <div class="extras-strip">

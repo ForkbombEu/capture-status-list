@@ -100,9 +100,9 @@
   /* Figma source of truth: button/input 6, chip 4, callout 5, alert 8 */
   --radius-xs:               4px;       /* badges, status chips */
   --radius-sm:               5px;       /* callout containers */
-  --radius:                  6px;       /* CANONICAL — buttons, inputs, cards */
+  --radius:                  6px;       /* CANONICAL — inputs, cards */
   --radius-md:               8px;       /* alerts, avatar squares */
-  --radius-lg:               10px;      /* hero cards (rare) */
+  --radius-lg:               10px;      /* buttons, hero cards */
   --radius-xl:               12px;      /* large feature blocks (rare) */
   --radius-pill:             999px;     /* pills */
 

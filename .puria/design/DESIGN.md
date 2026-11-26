@@ -398,20 +398,21 @@ completely, step for step. Treat it as the spine.
 ```css
 --radius-xs:    4px    /* badges, status chips */
 --radius-sm:    5px    /* callout containers */
---radius:       6px    /* CANONICAL — buttons, inputs, cards */
+--radius:       6px    /* CANONICAL — inputs, cards */
 --radius-md:    8px    /* alerts, avatar squares */
---radius-lg:   10px    /* hero cards (rare) */
+--radius-lg:   10px    /* buttons, hero cards */
 --radius-xl:   12px    /* large feature blocks (rare) */
 --radius-pill: 999px   /* pills */
 ```
 
-**6px is the canonical radius** for buttons, inputs and cards — reach for
-`--radius`. Chips and badges use `--radius-xs`, alerts `--radius-md`.
+**6px is the canonical radius** for inputs and cards — reach for `--radius`.
+Buttons use `--radius-lg` (10px), see [§11](#11-components). Chips and badges
+use `--radius-xs`, alerts `--radius-md`.
 
 > The two merged sources used the same radius names for different values
 > (`--radius-md` meant 6px in one and 8px in the other). The merge resolved it
 > by adopting the design system's names and rewriting every call site, so
-> `--radius` is now the single alias for the 6px button radius and the collision
+> `--radius` is now the single alias for the 6px radius and the collision
 > cannot come back. [§16](#16-merge-record) records the two pixel deltas that
 > resulted.
 
@@ -632,8 +633,12 @@ static `--bg-muted` blocks.
 | **Destructive** | Confirm-delete only. | `--destructive` | `--bg` |
 | **Link** | Inline / "See all ↗". | transparent | `--brand-primary` + underline |
 
-Sizes: `sm` (28px), `md` (40px default), `lg` (48px). All buttons use the 6px
-canonical radius. Label is 500 / 14 / 20.
+Sizes: `sm` (28px), `md` (36px), `lg` (44px). Use `lg` for a page's or a form's
+main actions, `md` inside cards and panels, `sm` in table rows and toolbars. All
+buttons use `--radius-lg` (10px). Labels are 600, at 13px (`sm` 12px, `lg`
+16px). These are the values `brand/style.css` renders; the Credimi Design System
+project still lists 40 / 48px, a 6px radius and a 500 / 14 label, and needs the
+same update so the two agree again.
 
 ### Alerts
 

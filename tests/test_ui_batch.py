@@ -21,7 +21,6 @@ def test_console_is_served_at_the_root() -> None:
     assert "/brand/logos/credimi_logo-transp.svg" in response.text
     assert "/debug/status-list" in response.text
     assert "/debug/status-lists" in response.text
-    assert "/token_status_list/take" in response.text
     assert 'id="allocation-count"' in response.text
     assert 'id="allocation-rows"' in response.text
     assert 'id="lst-bitmap-scroll"' in response.text
@@ -176,3 +175,13 @@ def test_batch_revoke_and_verify_selected_credentials() -> None:
 
     assert [item["result"] for item in verified] == ["REJECT", "REJECT", "ACCEPT"]
     assert [item["status"] for item in verified] == ["REVOKED", "REVOKED", "VALID"]
+
+
+def test_status_list_api_links_open_the_take_operation_in_the_docs() -> None:
+    html = client.get("/").text
+    take = client.get("/openapi.json").json()["paths"]["/token_status_list/take"]["post"]
+
+    # The take endpoint only accepts POST, so the topbar and footer links open
+    # its entry in Swagger UI; a renamed route would break this deep link.
+    assert html.count(f'href="/docs#/default/{take["operationId"]}"') == 2
+    assert 'href="/token_status_list/take"' not in html

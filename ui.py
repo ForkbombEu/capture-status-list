@@ -16,6 +16,10 @@ LOGO_MARK = f"{BRAND_ROOT}/logos/credimi_logo.svg"
 LOGO_WORDMARK = f"{BRAND_ROOT}/logos/credimi_logo-transp.svg"
 LOGO_WORDMARK_WHITE = f"{BRAND_ROOT}/logos/credimi_logo-transp_white.svg"
 CREDIMI_URL = "https://credimi.io"
+# `POST /token_status_list/take` answers a browser GET with 405, so its links
+# open the operation in the API docs (Swagger UI deep link: untagged routes sit
+# under "default", addressed by FastAPI's generated operationId).
+TAKE_DOCS_HREF = "/docs#/default/take_status_list_token_status_list_take_post"
 
 APP_CSS = """
     /* Application layer — loaded after the brand stylesheet.
@@ -578,13 +582,14 @@ def _topbar(active: str) -> str:
         ("Console", "/"),
         ("Explorer", "/explorer"),
         ("API docs", "/docs"),
-        ("Status list API", "/token_status_list/take"),
+        ("Status list API", TAKE_DOCS_HREF),
     )
     items = "\n".join(
         '        <li><a href="{href}"{current}>{label}</a></li>'.format(
             href=href,
             label=label,
-            current=' aria-current="page"' if label == active else "",
+            # The brand stylesheet marks the current page with `.nav-active`.
+            current=' class="nav-active" aria-current="page"' if label == active else "",
         )
         for label, href in links
     )
@@ -608,7 +613,7 @@ _FOOTER = f"""  <footer class="footer">
         </div>
         <div class="footer-links">
           <div class="footer-col">
-            <a href="/token_status_list/take">Status list API</a>
+            <a href="{TAKE_DOCS_HREF}">Status list API</a>
             <a href="/status/1">Legacy status list token</a>
             <a href="/token_status_list/aggregation">Status list aggregation</a>
             <a href="/.well-known/jwks.json">JWKS</a>
@@ -708,7 +713,6 @@ _CONSOLE_BODY = (
         <div class="panel-head">
           <h3 class="subsection-heading">Country × doctype lists <span id="registry-count" class="count-chip">0</span></h3>
           <div class="btn-row">
-            <button id="reset" class="btn btn-sm btn-outline">Reset state</button>
             <button id="registry-refresh" class="btn btn-sm btn-outline">Refresh lists</button>
             <button id="new-list-toggle" class="btn btn-sm btn-primary" aria-expanded="false" aria-controls="new-list-form">New status list</button>
           </div>
@@ -1207,11 +1211,6 @@ _CONSOLE_SCRIPT = """<script>
     });
 
     document.querySelector("#registry-refresh").onclick = () => guard(load);
-
-    document.querySelector("#reset").onclick = () => guard(async () => {
-      await jsonFetch("/reset", { method: "POST" });
-      await load();          // every list is gone: the console falls back
-    });
 
     function renderJwt(token) {
       const [header, payload, signature] = token.split(".");

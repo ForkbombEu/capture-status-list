@@ -145,7 +145,7 @@ def test_explorer_page_is_reachable_from_the_topbar() -> None:
     response = client.get("/explorer")
 
     assert response.status_code == 200
-    assert '<a href="/explorer" aria-current="page">Explorer</a>' in response.text
+    assert '<a href="/explorer" class="nav-active" aria-current="page">Explorer</a>' in response.text
     assert '<a href="/explorer">Explorer</a>' in client.get("/").text
 
 

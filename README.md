@@ -342,8 +342,7 @@ pool at a time:
 
 - `Country × doctype lists` is the inventory and the chooser: click a row (or
   press Enter on it) to work on that pool. `New status list` opens a country /
-  doctype / expiry form that allocates a pool and switches to it; `Reset state`
-  wipes every list.
+  doctype / expiry form that allocates a pool and switches to it.
 - The chosen pool opens in one panel titled with its country and doctype, with
   three tabs: `Entries` (`Add entries to this list` plus every allocated entry,
   each with its own `Revoke`), `Token` (the list URI as a link, the encoded JWT

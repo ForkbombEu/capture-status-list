@@ -149,6 +149,17 @@ def test_explorer_page_is_reachable_from_the_topbar() -> None:
     assert '<a href="/explorer">Explorer</a>' in client.get("/").text
 
 
+def test_explorer_keeps_rare_options_folded_and_reports_in_the_alert() -> None:
+    page = client.get("/explorer").text
+    advanced = page[page.index('<details class="disclosure') : page.index("</details>")]
+
+    assert 'name="explore-bits"' in advanced
+    assert 'id="explore-server"' in page
+    assert 'id="explore-tabs"' in page
+    assert 'id="notice"' in page
+    assert 'id="explore-out"' not in page
+
+
 def test_packed_bit_order_is_lsb_first() -> None:
     # TSL §4.1: index 0 is the least significant bit of the first byte.
     lst = base64.urlsafe_b64encode(zlib.compress(bytes([0x80, 0x01]))).decode()

@@ -437,17 +437,22 @@ curl -X POST http://localhost:8000/reset
 ## Status list explorer
 
 `/explorer` is a standalone debugger for status lists from any issuer, not
-only this server. Paste a payload (or load a file) and it shows the decoded
-header and payload, the inflated `lst` spectrum, every non-valid index grouped
-by status (`REVOKED`, `SUSPENDED`, `UNKNOWN(n)`), and the status of a single
-index. Accepted inputs:
+only this server. Paste a payload, load a file, or pick one of this server's
+lists (the country lists and the legacy `/status/1`) and press **Inspect**.
+The result has two tabs, as in the console: **Decoded status list** shows an
+index check that answers as you type, the counts, the inflated `lst`
+spectrum and every non-valid index grouped by status (Revoked, Suspended,
+Unknown); **Token** shows a JWT encoded beside its decoded header and payload,
+or the decoded parts of a CWT or JSON payload. Errors appear in a dismissible
+alert. Accepted inputs:
 
 - a Status List JWT (`header.payload.signature`)
 - a Status List CWT (COSE_Sign1, optionally CWT-tagged) as hex, base64 or
-  base64url; binary `.cwt` files are accepted through the file picker
+  base64url; binary `.cwt` files are accepted through **Load a file**
 - the JSON payload with a `status_list` claim, or the bare
   `{"bits": …, "lst": …}` claim
-- the `lst` value alone, decoded with the selected bits per entry
+- the `lst` value alone, decoded with the bits per entry set under
+  **Advanced**
 
 Signatures are not verified: a foreign list's signing key is unknown here, so
 the explorer is an inspection tool, not a verifier. Inflated lists are capped at

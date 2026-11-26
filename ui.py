@@ -137,12 +137,6 @@ APP_CSS = """
       .form-row > .form-field-md { flex: 1 1 100%; }
     }
     .test-table-wrap { max-width: 100%; }
-    .field-label {
-      display: block;
-      margin: var(--space-3) 0 var(--space-2);
-      font-size: var(--fs-sm);
-      font-weight: 500;
-    }
     input[type="number"] {
       font-family: var(--font-sans);
       font-size: var(--fs-base);
@@ -343,20 +337,6 @@ APP_CSS = """
     .legend-payload { background: var(--brand-accent-vivid); }
     .legend-signature { background: var(--credential); }
 
-    /* A group heading inside a panel or section (the brand .subsection-heading),
-       set off by a hairline. No trailing colon (DESIGN.md §15). */
-    .subhead {
-      margin: var(--space-6) 0 var(--space-3);
-      padding-bottom: var(--space-2);
-      border-bottom: 1px solid var(--border);
-    }
-    .decoded-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--space-4);
-    }
-    .decoded-grid > * { min-width: 0; }
-    .decoded-grid pre { max-height: 320px; overflow: auto; }
     .bitmap-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 48px;
@@ -499,47 +479,45 @@ APP_CSS = """
       color: var(--fg-subtle);
       word-break: break-word;
     }
-    .index-groups .eyebrow { margin-top: var(--space-3); }
-    .index-groups .eyebrow:first-child { margin-top: 0; }
+    .index-group + .index-group { margin-top: var(--space-3); }
+    .index-group-name {
+      margin-bottom: var(--space-1);
+      font-size: var(--fs-sm);
+      font-weight: 600;
+    }
 
-    /* Explorer: the pasted payload, its options, and the single-index lookup. */
+    /* Explorer: the payload textarea matches the form-row controls, the bits
+       setting waits in an Advanced disclosure, and the file picker is a button
+       whose native input stays focusable but out of sight. */
     .payload-input {
       display: block;
       width: 100%;
       min-height: 160px;
-      padding: var(--space-3) var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+      padding: var(--space-3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
       background: var(--bg);
       color: var(--fg);
       font: var(--fs-sm)/1.5 var(--font-mono);
       resize: vertical;
       word-break: break-all;
     }
-    .payload-input:focus,
-    .explorer-select:focus {
-      outline: none;
-      border-color: var(--brand-primary);
-      box-shadow: 0 0 0 3px oklch(0.2955 0.1659 277.31 / 0.18);
+    .payload-input:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .disclosure-body { padding: var(--space-4); }
+    .bits-segmented { max-width: 320px; }
+    .btn-row[hidden] { display: none; }
+    .file-button { position: relative; }
+    .file-button input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
-    .explorer-fields {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0 var(--space-3);
-    }
-    @media (max-width: 560px) {
-      .explorer-fields { grid-template-columns: 1fr; }
-    }
-    .explorer-select {
-      width: 100%;
-      height: 36px;
-      padding: 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--bg);
-      color: var(--fg);
-      font: var(--fs-base) var(--font-sans);
-    }
+    .file-button:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
+    /* A token without an encoded form to show (CWT, JSON) keeps one column. */
+    .jwt-columns-single { grid-template-columns: 1fr; }
     /* The registry is the chooser: clicking a row opens that list's panel under
        it. Rows top-align like the scoreboard and stay white; the chevron marks
        the open one, and the usual hairline separates it from its panel. */
@@ -583,14 +561,8 @@ APP_CSS = """
     @media (prefers-reduced-motion: reduce) {
       .registry-chevron { transition: none; }
     }
-    .explorer-file { font: var(--fs-sm) var(--font-sans); padding-top: var(--space-2); }
-    .index-lookup {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-3);
-    }
-    .index-lookup input[type="number"] { width: 160px; }
+    /* The explorer's index check answers as you type, its chip beside the field. */
+    .index-check-status { display: inline-flex; align-items: center; min-height: 44px; }
     .status-suspended { background: var(--warning-bg); color: var(--fg); }
     .status-suspended::before { background: var(--warning); }
 
@@ -640,7 +612,6 @@ APP_CSS = """
 
     @media (max-width: 768px) {
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .decoded-grid { grid-template-columns: 1fr; }
     }
 """
 
@@ -1429,47 +1400,61 @@ _EXPLORER_BODY = (
     + _section_intro(
         2,
         "payload-title",
-        "Payload",
-        'Accepts a JWT, a CWT as hex or base64, the JSON payload, or the bare <span class="mono">lst</span>'
-        " value. Signatures are not verified.",
+        "Inspect a status list",
+        'Paste a JWT, a CWT as hex or base64, the JSON payload or the bare <span class="mono">lst</span>'
+        " value, load a file, or pick one of this server's lists. Signatures are not verified.",
     )
     + """
-        <label class="field-label" for="explore-payload">Status list JWT, CWT, JSON payload or lst</label>
+      <label class="form-field">
+        <span class="subsection-heading">Payload</span>
         <textarea id="explore-payload" class="payload-input" spellcheck="false"
           placeholder="eyJhbGciOiJFUzI1NiIs… · d28450a3… · {&quot;bits&quot;:1,&quot;lst&quot;:&quot;eNrb…&quot;} · eNrb…"></textarea>
-        <div class="explorer-fields">
-          <div>
-            <label class="field-label" for="explore-bits">Bits per entry, for a bare lst</label>
-            <select id="explore-bits" class="explorer-select">
-              <option value="1" selected>1</option>
-              <option value="2">2</option>
-              <option value="4">4</option>
-              <option value="8">8</option>
-            </select>
-          </div>
-          <div>
-            <label class="field-label" for="explore-file">Or load a file</label>
-            <input id="explore-file" type="file" class="explorer-file">
+      </label>
+      <details class="disclosure mt-4">
+        <summary>Advanced</summary>
+        <div class="disclosure-body">
+          <div class="form-field">
+            <span class="subsection-heading" id="explore-bits-label">Bits per entry</span>
+            <div class="segmented bits-segmented" role="radiogroup" aria-labelledby="explore-bits-label">
+              <label><input type="radio" name="explore-bits" value="1" checked><span>1</span></label>
+              <label><input type="radio" name="explore-bits" value="2"><span>2</span></label>
+              <label><input type="radio" name="explore-bits" value="4"><span>4</span></label>
+              <label><input type="radio" name="explore-bits" value="8"><span>8</span></label>
+            </div>
+            <p class="text-sm text-muted">Read only for a bare <span class="mono">lst</span> value; tokens and JSON carry their own.</p>
           </div>
         </div>
-        <div class="btn-row mt-4">
-          <button id="explore" class="btn btn-lg btn-primary">Inspect payload</button>
-          <button id="explore-current" class="btn btn-lg btn-outline">Load this server's status list</button>
-        </div>
-        <pre class="output mt-4" id="explore-out">Paste a payload, then inspect it.</pre>
+      </details>
+      <div class="form-row mt-4">
+        <label class="form-field form-field-grow">
+          <span class="subsection-heading">Load from this server</span>
+          <select id="explore-server"><option value="">Choose a list…</option></select>
+        </label>
+        <label class="btn btn-lg btn-outline file-button"><input id="explore-file" type="file">Load a file</label>
+        <button id="explore" class="btn btn-lg btn-primary" type="button">Inspect</button>
+      </div>
     </div>
     </section>
 
     <section class="page-section page-section-white" id="explore-card" aria-labelledby="decoded-title" hidden>
     <div class="container">
 """
-    + _section_intro(2, "decoded-title", "Decoded status list")
+    + _section_intro(2, "decoded-title", "Inspection result", '<span id="explore-summary"></span>')
     + """
-        <div class="metric-grid">
-          <div class="card">
-            <strong class="metric-value" id="explore-format">—</strong>
-            <span class="eyebrow">Format</span>
-          </div>
+      <div class="tabs" role="tablist" id="explore-tabs" aria-label="Inspection views">
+        <button class="tab-btn active" type="button" role="tab" id="explore-tab-decoded" data-tab="decoded" aria-selected="true" aria-controls="explore-decoded-panel">Decoded status list</button>
+        <button class="tab-btn" type="button" role="tab" id="explore-tab-token" data-tab="token" aria-selected="false" aria-controls="explore-token-panel" tabindex="-1">Token</button>
+      </div>
+
+      <div role="tabpanel" id="explore-decoded-panel" aria-labelledby="explore-tab-decoded">
+        <div class="form-row">
+          <label class="form-field form-field-md">
+            <span class="subsection-heading">Check an index</span>
+            <input id="explore-index" type="number" min="0" value="0">
+          </label>
+          <span id="explore-index-status" class="index-check-status" aria-live="polite"></span>
+        </div>
+        <div class="metric-grid mt-4">
           <div class="card">
             <strong class="metric-value" id="explore-bits-value">0</strong>
             <span class="eyebrow">Bits per entry</span>
@@ -1479,26 +1464,16 @@ _EXPLORER_BODY = (
             <span class="eyebrow">Entries</span>
           </div>
           <div class="card">
-            <strong class="metric-value" id="explore-revoked">0</strong>
-            <span class="eyebrow">Revoked</span>
+            <strong class="metric-value" id="explore-valid">0</strong>
+            <span class="eyebrow">Valid</span>
+          </div>
+          <div class="card">
+            <strong class="metric-value" id="explore-not-valid">0</strong>
+            <span class="eyebrow">Not valid</span>
           </div>
         </div>
         <p class="lst-note" id="explore-note"></p>
-
-        <h3 class="subsection-heading subhead">Check an index</h3>
-        <div class="index-lookup">
-          <input id="explore-index" type="number" min="0" value="0" aria-label="Index">
-          <button id="explore-lookup" class="btn btn-sm btn-secondary">Check index</button>
-          <span id="explore-index-status"></span>
-        </div>
-
-        <h3 class="subsection-heading subhead">Non-valid indices</h3>
-        <div id="explore-indices" class="index-groups"></div>
-        <div class="btn-row mt-4">
-          <button id="explore-copy-indices" class="btn btn-sm btn-outline">Copy the indices</button>
-        </div>
-
-        <h3 class="subsection-heading subhead">Inflated lst spectrum</h3>
+        <p class="eyebrow mt-4">Inflated lst spectrum</p>
         <div class="bitmap-shell">
           <div class="bitmap-scroll" id="explore-bitmap-scroll" tabindex="0" aria-label="Full inflated status list">
             <div class="bitmap" id="explore-bitmap"></div>
@@ -1508,18 +1483,36 @@ _EXPLORER_BODY = (
           </div>
         </div>
         <p class="bitmap-caption" id="explore-caption"></p>
+        <p class="eyebrow mt-4">Non-valid indices</p>
+        <div id="explore-indices"></div>
+        <div class="btn-row mt-4" id="explore-copy-row">
+          <button id="explore-copy-indices" class="btn btn-sm btn-outline" type="button">Copy the indices</button>
+        </div>
+      </div>
 
-        <h3 class="subsection-heading subhead">Decoded token</h3>
-        <div class="decoded-grid">
-          <div>
-            <p class="eyebrow">Header</p>
-            <pre id="explore-header"></pre>
+      <div role="tabpanel" id="explore-token-panel" aria-labelledby="explore-tab-token" hidden>
+        <div class="jwt-columns" id="explore-columns">
+          <div id="explore-encoded">
+            <p class="eyebrow">Encoded</p>
+            <pre class="output jwt" id="explore-jwt"></pre>
+            <div class="flex-between gap-3 mt-4">
+              <p class="jwt-legend">
+                <span class="badge"><span class="badge-dot legend-header"></span>Header</span>
+                <span class="badge"><span class="badge-dot legend-payload"></span>Payload</span>
+                <span class="badge"><span class="badge-dot legend-signature"></span>Signature</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <p class="eyebrow">Payload</p>
+          <div class="jwt-decoded">
+            <div id="explore-header-block">
+              <p class="eyebrow">Decoded header</p>
+              <pre id="explore-header"></pre>
+            </div>
+            <p class="eyebrow mt-4">Decoded payload</p>
             <pre id="explore-payload-json"></pre>
           </div>
         </div>
+      </div>
     </div>
     </section>
 """
@@ -1531,9 +1524,11 @@ _EXPLORER_BODY = (
 
 _EXPLORER_SCRIPT = """<script>
     const STATUS_NAMES = { 0: "VALID", 1: "REVOKED", 2: "SUSPENDED" };
+    const FORMAT_NAMES = { jwt: "a JWT", cwt: "a CWT", json: "a JSON payload", lst: "a bare lst" };
     const payloadInput = document.querySelector("#explore-payload");
-    const explorerOut = document.querySelector("#explore-out");
-    const exploreCard = document.querySelector("#explore-card");
+    const resultSection = document.querySelector("#explore-card");
+    const serverLists = document.querySelector("#explore-server");
+    const showTab = setupTabs(document.querySelector("#explore-tabs"));
     let explored = null;
 
     function statusName(value) {
@@ -1562,16 +1557,22 @@ _EXPLORER_SCRIPT = """<script>
             const indices = groups[name];
             const shown = indices.slice(0, 500);
             const rest = indices.length - shown.length;
-            return `<p class="eyebrow">${escapeHtml(name)} · ${indices.length}</p>` +
-              `<p class="index-list">${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}</p>`;
+            return `<div class="index-group"><p class="index-group-name">${escapeHtml(statusLabel(name))} · ${indices.length}</p>` +
+              `<p class="index-list">${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}</p></div>`;
           }).join("")
-        : `<p class="index-list">None. Every entry is VALID.</p>`;
+        : `<p class="index-list">None: every entry is valid.</p>`;
+      document.querySelector("#explore-copy-row").hidden = !names.length;
     }
 
+    // The index check answers as you type; an empty field shows nothing.
     function lookupIndex() {
-      if (!explored) return;
       const target = document.querySelector("#explore-index-status");
-      const index = Number(document.querySelector("#explore-index").value);
+      const raw = document.querySelector("#explore-index").value;
+      if (!explored || raw === "") {
+        target.innerHTML = "";
+        return;
+      }
+      const index = Number(raw);
       if (!Number.isInteger(index) || index < 0 || index >= explored.size) {
         target.innerHTML = `<span class="status-chip status-reject">Out of range: 0 to ${explored.size - 1}</span>`;
         return;
@@ -1580,56 +1581,96 @@ _EXPLORER_SCRIPT = """<script>
       target.innerHTML = `<span class="status-chip status-${escapeHtml(name.toLowerCase())}">${escapeHtml(statusLabel(name))}</span>`;
     }
 
-    function renderExplored(data) {
-      explored = data;
-      document.querySelector("#explore-format").textContent = data.format.toUpperCase();
-      document.querySelector("#explore-bits-value").textContent = data.bits;
-      document.querySelector("#explore-size").textContent = data.size;
-      document.querySelector("#explore-revoked").textContent = data.counts.REVOKED || 0;
-      const counts = Object.entries(data.counts).map(([name, count]) => `${count} ${name}`).join(", ");
-      document.querySelector("#explore-note").textContent =
-        `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
-        `${data.lst.inflated_bytes} bytes holding ${data.size} entries at ${data.bits} ` +
-        `bit${data.bits === 1 ? "" : "s"} per entry: ${counts}.`;
+    // The Token tab: a JWT shows encoded beside decoded, a CWT or JSON payload
+    // its decoded parts only, and a bare lst has no token to show.
+    function renderToken(data, payload) {
+      const jwt = data.format === "jwt";
+      document.querySelector("#explore-tab-token").hidden = data.format === "lst";
+      document.querySelector("#explore-encoded").hidden = !jwt;
+      document.querySelector("#explore-columns").classList.toggle("jwt-columns-single", !jwt);
+      if (jwt) renderJwt(document.querySelector("#explore-jwt"), payload);
+      document.querySelector("#explore-header-block").hidden = !Object.keys(data.header).length;
       document.querySelector("#explore-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#explore-payload-json").textContent = JSON.stringify(data.payload, null, 2);
+    }
+
+    function renderExplored(data, payload) {
+      explored = data;
+      const signed = data.format === "jwt" || data.format === "cwt";
+      document.querySelector("#explore-summary").textContent =
+        `Decoded from ${FORMAT_NAMES[data.format] || data.format}: ${data.size} entries at ` +
+        `${data.bits} bit${data.bits === 1 ? "" : "s"} per entry.` +
+        (signed ? " The signature was not verified." : "");
+      document.querySelector("#explore-bits-value").textContent = data.bits;
+      document.querySelector("#explore-size").textContent = data.size;
+      document.querySelector("#explore-valid").textContent = data.counts.VALID || 0;
+      document.querySelector("#explore-not-valid").textContent = data.non_valid_indices.length;
+      const counts = Object.entries(data.counts)
+        .map(([name, count]) => `${count} ${statusLabel(name).toLowerCase()}`)
+        .join(", ");
+      document.querySelector("#explore-note").textContent =
+        `"lst" is ${data.lst.compressed_bytes} compressed bytes; it inflates to ` +
+        `${data.lst.inflated_bytes} bytes: ${counts}.`;
       renderIndices(data);
+      renderToken(data, payload);
+      resultSection.hidden = false;
+      showTab("decoded");
       renderBitmap("explore", data.lst, data.non_valid_indices);
-      exploreCard.hidden = false;
       lookupIndex();
     }
 
     async function inspect() {
       const payload = payloadInput.value.trim();
-      if (!payload) return void (explorerOut.textContent = "Paste a payload first.");
-      let response;
+      if (!payload) {
+        return notify("Paste a payload, load a file, or pick one of this server's lists.", "info", "Nothing to inspect");
+      }
+      const bits = Number(document.querySelector('input[name="explore-bits"]:checked').value);
+      let data;
       try {
-        response = await fetch("/debug/status-list/explore", {
+        data = await jsonFetch("/debug/status-list/explore", {
           method: "POST",
-          cache: "no-store",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ payload, bits: Number(document.querySelector("#explore-bits").value) }),
+          body: JSON.stringify({ payload, bits }),
         });
       } catch (error) {
-        explorerOut.textContent = String(error);
-        return;
-      }
-      const body = await response.json();
-      if (!response.ok) {
-        exploreCard.hidden = true;
+        resultSection.hidden = true;  // no stale result under a failed payload
         explored = null;
-        explorerOut.textContent = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail, null, 2);
-        return;
+        throw error;
       }
-      renderExplored(body);
-      explorerOut.textContent = `Decoded a ${body.format.toUpperCase()} status list: ${body.size} entries, ${body.non_valid_indices.length} not VALID.`;
+      renderExplored(data, payload);
+      resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
+    // This server's lists, the legacy one first; picking one inspects its JWT.
+    async function loadServerLists() {
+      const summaries = await jsonFetch("/debug/status-lists");
+      const chosen = serverLists.value;
+      serverLists.innerHTML =
+        '<option value="">Choose a list…</option>' +
+        '<option value="/status/1">Legacy credential list · /status/1</option>' +
+        summaries.map((item) => {
+          const path = new URL(item.status_list_uri).pathname;
+          return `<option value="${escapeHtml(path)}">${escapeHtml(item.country)} · ${escapeHtml(item.doctype)} · ${escapeHtml(item.list_id.slice(0, 8))}</option>`;
+        }).join("");
+      serverLists.value = chosen;
+    }
+    serverLists.onfocus = () => guard(loadServerLists);
+    serverLists.onchange = () => guard(async () => {
+      if (!serverLists.value) return;
+      const response = await fetch(serverLists.value, {
+        cache: "no-store",
+        headers: { accept: "application/statuslist+jwt" },
+      });
+      if (!response.ok) throw await response.text();
+      payloadInput.value = (await response.text()).trim();
+      await inspect();
+    });
+
     // Binary CWT files become base64; text files (JWT, JSON, hex) load as-is.
-    document.querySelector("#explore-file").onchange = async (event) => {
+    document.querySelector("#explore-file").onchange = (event) => guard(async () => {
       const file = event.target.files[0];
       if (!file) return;
       const bytes = new Uint8Array(await file.arrayBuffer());
+      event.target.value = "";  // picking the same file again still loads it
       let text = null;
       try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (error) { text = null; }
       if (text === null || bytes[0] === 0xd2 || bytes[0] === 0xd8 || bytes[0] === 0x84) {
@@ -1640,31 +1681,18 @@ _EXPLORER_SCRIPT = """<script>
         payloadInput.value = text.trim();
       }
       await inspect();
-    };
+    });
 
-    document.querySelector("#explore-current").onclick = async () => {
-      let response;
-      try {
-        response = await fetch("/status/1", { cache: "no-store", headers: { accept: "application/statuslist+jwt" } });
-      } catch (error) {
-        explorerOut.textContent = String(error);
-        return;
-      }
-      payloadInput.value = await response.text();
-      await inspect();
-    };
-
-    document.querySelector("#explore").onclick = inspect;
-    document.querySelector("#explore-lookup").onclick = lookupIndex;
-    document.querySelector("#explore-index").onkeydown = (event) => {
-      if (event.key === "Enter") lookupIndex();
-    };
+    document.querySelector("#explore").onclick = () => guard(inspect);
+    document.querySelector("#explore-index").oninput = lookupIndex;
     document.querySelector("#explore-copy-indices").onclick = async (event) => {
       if (!explored) return;
       await navigator.clipboard.writeText(explored.non_valid_indices.join(","));
       event.target.textContent = "Copied";
       setTimeout(() => { event.target.textContent = "Copy the indices"; }, 2000);
     };
+
+    guard(loadServerLists);
   </script>"""
 
 

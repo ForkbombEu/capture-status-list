@@ -774,6 +774,21 @@ def _hero_band(title: str, description: str) -> str:
   </section>"""
 
 
+# The one alert every page reports failures and hints in (DESIGN.md §11
+# Alerts); the shared script's notify() fills and shows it.
+_NOTICE = """
+      <div id="notice" class="notice" role="alert" hidden>
+        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <div>
+          <p class="notice-title" id="notice-title"></p>
+          <p class="notice-body" id="notice-body"></p>
+        </div>
+        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
+      </div>
+"""
+
+
 _CONSOLE_BODY = (
     _hero_band(
         "Token status list console",
@@ -918,15 +933,9 @@ _CONSOLE_BODY = (
         </div>
       </section>
 
-      <div id="notice" class="notice" role="alert" hidden>
-        <svg class="notice-icon notice-icon-destructive" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-        <svg class="notice-icon notice-icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-        <div>
-          <p class="notice-title" id="notice-title"></p>
-          <p class="notice-body" id="notice-body"></p>
-        </div>
-        <button id="notice-dismiss" class="btn btn-sm btn-ghost" type="button">Dismiss</button>
-      </div>
+"""
+    + _NOTICE
+    + """
 
     </div>
     </div>
@@ -957,6 +966,91 @@ _SHARED_SCRIPT = """<script>
     // case, since DESIGN.md §3 keeps uppercase for eyebrow labels only.
     function statusLabel(value) {
       return value.charAt(0) + value.slice(1).toLowerCase();
+    }
+
+    // Failures and hints float in the page's one alert until dismissed or until
+    // the next action starts; successful actions show their result in the page.
+    const notice = document.querySelector("#notice");
+
+    function describe(value) {
+      if (typeof value === "string") return value;
+      if (value instanceof Error) return value.message;
+      if (value && typeof value.detail === "string") return value.detail;
+      return JSON.stringify(value, null, 2);
+    }
+
+    function notify(value, kind = "destructive", title = kind === "info" ? "Nothing selected" : "The action failed") {
+      notice.className = `notice notice-${kind}`;
+      document.querySelector("#notice-title").textContent = title;
+      document.querySelector("#notice-body").textContent = describe(value);
+      notice.hidden = false;
+    }
+    document.querySelector("#notice-dismiss").onclick = () => { notice.hidden = true; };
+
+    // Every action reports failures in the alert: an unhandled rejection would
+    // leave the page stale with no explanation.
+    async function guard(action) {
+      notice.hidden = true;
+      try {
+        await action();
+      } catch (error) {
+        notify(error);
+      }
+    }
+
+    async function jsonFetch(url, options = {}) {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { "content-type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      const type = response.headers.get("content-type") || "";
+      const body = type.includes("application/json") ? await response.json() : await response.text();
+      if (!response.ok) throw body;
+      return body;
+    }
+
+    // Tabs (the WAI-ARIA pattern): one panel shows at a time and arrow keys move
+    // between tabs. Returns the function that shows a tab by its data-tab name.
+    function setupTabs(tablist) {
+      const tabs = [...tablist.querySelectorAll("[role=tab]")];
+      function showTab(name) {
+        for (const tab of tabs) {
+          const active = tab.dataset.tab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+          const panel = document.getElementById(tab.getAttribute("aria-controls"));
+          panel.hidden = !active;
+          // A bitmap laid out while its tab was hidden measured nothing; a
+          // scroll event makes it re-measure its minimap viewport now it shows.
+          if (active) {
+            panel.querySelectorAll(".bitmap-scroll").forEach((scroll) => scroll.dispatchEvent(new Event("scroll")));
+          }
+        }
+      }
+      tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
+      tablist.onkeydown = (event) => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!step) return;
+        const visible = tabs.filter((tab) => !tab.hidden);
+        const index = visible.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+        const next = visible[(index + step + visible.length) % visible.length];
+        showTab(next.dataset.tab);
+        next.focus();
+      };
+      return showTab;
+    }
+
+    // A JWT as its three segments, each in its own brand colour.
+    function renderJwt(target, token) {
+      const [header, payload, signature] = token.split(".");
+      target.innerHTML =
+        `<span class="jwt-header">${escapeHtml(header)}</span>` +
+        `<span class="jwt-dot">.</span>` +
+        `<span class="jwt-payload">${escapeHtml(payload)}</span>` +
+        `<span class="jwt-dot">.</span>` +
+        `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
     }
 
     const ROW_ENTRIES = 64;
@@ -1058,7 +1152,6 @@ _CONSOLE_SCRIPT = """<script>
     // Where the panel rests while no list is open; re-rendering the rows parks
     // it here first, so it is never detached from the document.
     const workingCardHome = workingCard.parentElement;
-    const notice = document.querySelector("#notice");
     const jwtBox = document.querySelector("#jwt");
     const copyButton = document.querySelector("#copy-token");
     let allocations = [];
@@ -1067,47 +1160,6 @@ _CONSOLE_SCRIPT = """<script>
     // The working list the whole console is scoped to: null until the
     // operator clicks a list in the registry.
     let activeListUri = null;
-
-    function describe(value) {
-      if (typeof value === "string") return value;
-      if (value instanceof Error) return value.message;
-      if (value && typeof value.detail === "string") return value.detail;
-      return JSON.stringify(value, null, 2);
-    }
-
-    // Failures and hints float in one alert until dismissed or until the next
-    // action starts; successful actions show their result in the panels.
-    function notify(value, kind = "destructive") {
-      notice.className = `notice notice-${kind}`;
-      document.querySelector("#notice-title").textContent =
-        kind === "info" ? "Nothing selected" : "The action failed";
-      document.querySelector("#notice-body").textContent = describe(value);
-      notice.hidden = false;
-    }
-    document.querySelector("#notice-dismiss").onclick = () => { notice.hidden = true; };
-
-    // Every dashboard fetch reports failures in the notice: an unhandled
-    // rejection would leave the operator with a stale table and no explanation.
-    async function guard(action) {
-      notice.hidden = true;
-      try {
-        await action();
-      } catch (error) {
-        notify(error);
-      }
-    }
-
-    async function jsonFetch(url, options = {}) {
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: { "content-type": "application/json", ...(options.headers || {}) },
-        ...options,
-      });
-      const type = response.headers.get("content-type") || "";
-      const body = type.includes("application/json") ? await response.json() : await response.text();
-      if (!response.ok) throw body;
-      return body;
-    }
 
     function workingPool() {
       return registry.find((item) => item.status_list_uri === activeListUri) || null;
@@ -1221,32 +1273,7 @@ _CONSOLE_SCRIPT = """<script>
     }
 
     // The working-list views: one tab visible at a time keeps the page short.
-    const tabs = [...document.querySelectorAll("#working-tabs [role=tab]")];
-    function showTab(name) {
-      for (const tab of tabs) {
-        const active = tab.dataset.tab === name;
-        tab.classList.toggle("active", active);
-        tab.setAttribute("aria-selected", String(active));
-        tab.tabIndex = active ? 0 : -1;
-        const panel = document.getElementById(tab.getAttribute("aria-controls"));
-        panel.hidden = !active;
-        // A bitmap laid out while its tab was hidden measured nothing; a scroll
-        // event makes it re-measure its minimap viewport now that it shows.
-        if (active) {
-          panel.querySelectorAll(".bitmap-scroll").forEach((scroll) => scroll.dispatchEvent(new Event("scroll")));
-        }
-      }
-    }
-    tabs.forEach((tab) => { tab.onclick = () => showTab(tab.dataset.tab); });
-    // Arrow keys move between tabs, as in the WAI-ARIA tabs pattern.
-    document.querySelector("#working-tabs").onkeydown = (event) => {
-      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
-      if (!step) return;
-      const index = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
-      const next = tabs[(index + step + tabs.length) % tabs.length];
-      showTab(next.dataset.tab);
-      next.focus();
-    };
+    const showTab = setupTabs(document.querySelector("#working-tabs"));
 
     function chooseRow(event) {
       if (event.target.closest("a")) return;  // the list name opens its URI instead
@@ -1335,19 +1362,9 @@ _CONSOLE_SCRIPT = """<script>
 
     document.querySelector("#registry-refresh").onclick = () => guard(load);
 
-    function renderJwt(token) {
-      const [header, payload, signature] = token.split(".");
-      jwtBox.innerHTML =
-        `<span class="jwt-header">${escapeHtml(header)}</span>` +
-        `<span class="jwt-dot">.</span>` +
-        `<span class="jwt-payload">${escapeHtml(payload)}</span>` +
-        `<span class="jwt-dot">.</span>` +
-        `<span class="jwt-signature">${escapeHtml(signature)}</span>`;
-    }
-
     function renderDecodedToken(data) {
       currentToken = data.token;
-      renderJwt(data.token);
+      renderJwt(jwtBox, data.token);
       document.querySelector("#jwt-header").textContent = JSON.stringify(data.header, null, 2);
       document.querySelector("#jwt-payload").textContent = JSON.stringify(data.payload, null, 2);
       document.querySelector("#lst-bits").textContent = data.bits;
@@ -1505,6 +1522,9 @@ _EXPLORER_BODY = (
         </div>
     </div>
     </section>
+"""
+    + _NOTICE
+    + """
   </main>"""
 )
 
